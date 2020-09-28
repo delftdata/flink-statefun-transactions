@@ -311,7 +311,27 @@ public class RequestReplyFunctionTest {
     }
 
     @Override
-    public void send(Address to, Object message) {}
+    public TransactionMessage getTransactionMessage() {
+      return null;
+    }
+
+    @Override
+    public boolean isTransaction() {
+      return false;
+    }
+
+    @Override
+    public String getTransactionId() {
+      return null;
+    }
+
+    @Override
+    public void sendTpcMessage(Address to, Object message, String transactionId, TransactionMessage transactionMessage) {
+
+    }
+
+    @Override
+    public void send(Address to, Object message) { return;}
 
     @Override
     public <T> void send(EgressIdentifier<T> egress, T message) {

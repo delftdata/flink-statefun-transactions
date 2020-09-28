@@ -25,6 +25,7 @@ import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.statefun.flink.core.generated.Envelope;
 import org.apache.flink.statefun.flink.core.generated.EnvelopeAddress;
 import org.apache.flink.statefun.sdk.Address;
+import org.apache.flink.statefun.sdk.Context;
 import org.apache.flink.statefun.sdk.FunctionType;
 
 final class ProtobufMessage implements Message {
@@ -70,6 +71,32 @@ final class ProtobufMessage implements Message {
       payload = factory.copyUserMessagePayload(targetClassLoader, payload);
     }
     return payload;
+  }
+
+  @Override
+  public String getTransactionId() {
+    return envelope.getTransactionId();
+  }
+
+  @Override
+  public Context.TransactionMessage getTransactionMessage() {
+    switch (envelope.getTransactionMessage()) {
+      case NONE:
+        return null;
+      case PREPARE:
+        return Context.TransactionMessage.PREPARE;
+      case ABORT:
+        return Context.TransactionMessage.ABORT;
+      case COMMIT:
+        return Context.TransactionMessage.COMMIT;
+    }
+    return null;
+  }
+
+  @Override
+  public boolean isTransaction() {
+    if (getTransactionMessage() == null) { return false; }
+    return true;
   }
 
   @Override

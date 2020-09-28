@@ -67,6 +67,10 @@ public class MessageTest {
 
     Message fromSdk = factory.from(FUNCTION_1_ADDR, FUNCTION_2_ADDR, payload);
     DataOutputSerializer out = new DataOutputSerializer(32);
+    System.out.println("fromSdK ---> " + fromSdk.toString());
+    System.out.println("factory ---> " + factory.toString());
+    System.out.println("out ---> " + out.toString());
+
     fromSdk.writeTo(factory, out);
 
     Message fromEnvelope = factory.from(new DataInputDeserializer(out.getCopyOfBuffer()));

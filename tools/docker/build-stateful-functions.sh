@@ -21,7 +21,7 @@ set -e
 # Do not change the name of this variable;
 # it is referenced in the tools/releasing/update_branch_version.sh script
 #
-VERSION_TAG=2.3-SNAPSHOT
+VERSION_TAG=latest
 
 #
 # setup the environment 
@@ -62,7 +62,7 @@ cp ${core_jar} ${docker_context_flink}/lib/statefun-flink-core.jar
 cd ${docker_context_root}
 cp ${basedir}/Dockerfile ${docker_context_root}
 cp ${basedir}/docker-entry-point.sh ${docker_context_root}
-docker build . -t flink-statefun:${VERSION_TAG}
+docker build . -t martijn-thesis-flink-statefun:${VERSION_TAG}
 
 # clean again
 rm -rf ${docker_context_root}

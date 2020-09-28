@@ -77,6 +77,26 @@ class TestContext implements Context {
   }
 
   @Override
+  public TransactionMessage getTransactionMessage() {
+    return null;
+  }
+
+  @Override
+  public boolean isTransaction() {
+    return false;
+  }
+
+  @Override
+  public String getTransactionId() {
+    return null;
+  }
+
+  @Override
+  public void sendTpcMessage(Address to, Object message, String transactionId, TransactionMessage transactionMessage) {
+    return;
+  }
+
+  @Override
   public void reply(Object message) {
     Address to = caller();
     if (to == null) {

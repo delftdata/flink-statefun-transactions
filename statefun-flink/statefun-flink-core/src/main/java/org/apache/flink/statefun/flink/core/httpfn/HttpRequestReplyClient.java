@@ -74,7 +74,7 @@ final class HttpRequestReplyClient implements RequestReplyClient {
     final InputStream httpResponseBody = responseBody(response);
     try {
       FromFunction fromFunction = parseProtobufOrThrow(FromFunction.parser(), httpResponseBody);
-      if (fromFunction.hasInvocationResult()) {
+      if (fromFunction.hasInvocationResult() || fromFunction.hasTpcFunctionInvocationResult()) {
         return fromFunction;
       }
       return FromFunction.getDefaultInstance();

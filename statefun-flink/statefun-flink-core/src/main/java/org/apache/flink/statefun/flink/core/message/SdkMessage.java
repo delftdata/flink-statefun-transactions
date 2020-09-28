@@ -26,6 +26,7 @@ import org.apache.flink.statefun.flink.core.generated.Envelope;
 import org.apache.flink.statefun.flink.core.generated.Envelope.Builder;
 import org.apache.flink.statefun.flink.core.generated.EnvelopeAddress;
 import org.apache.flink.statefun.sdk.Address;
+import org.apache.flink.statefun.sdk.Context;
 
 final class SdkMessage implements Message {
 
@@ -35,12 +36,26 @@ final class SdkMessage implements Message {
 
   private Object payload;
 
+  private String transactionId;
+  private Context.TransactionMessage transactionMessage;
+
   @Nullable private Envelope cachedEnvelope;
 
   SdkMessage(@Nullable Address source, Address target, Object payload) {
     this.source = source;
     this.target = Objects.requireNonNull(target);
     this.payload = Objects.requireNonNull(payload);
+    this.transactionId = null;
+    this.transactionMessage = null;
+  }
+
+  SdkMessage(@Nullable Address source, Address target, Object payload,
+             String transactionId, Context.TransactionMessage transactionMessage) {
+    this.source = source;
+    this.target = Objects.requireNonNull(target);
+    this.payload = Objects.requireNonNull(payload);
+    this.transactionId = transactionId;
+    this.transactionMessage = transactionMessage;
   }
 
   @Override
@@ -61,6 +76,22 @@ final class SdkMessage implements Message {
     }
     return payload;
   }
+
+  @Override
+  public boolean isTransaction() {
+    if (transactionMessage == null) {
+      return false;
+    } else {
+      return true;
+    }
+  }
+
+  @Override
+  public String getTransactionId() {
+    return transactionId;
+  }
+
+  public Context.TransactionMessage getTransactionMessage() { return transactionMessage; }
 
   @Override
   public OptionalLong isBarrierMessage() {
@@ -86,9 +117,28 @@ final class SdkMessage implements Message {
       }
       builder.setTarget(sdkAddressToProtobufAddress(target));
       builder.setPayload(factory.serializeUserMessagePayload(payload));
+      if (transactionMessage != null) {
+        builder.setTransactionMessage(
+                contextTransactionMessageToEnvelopeTransactionMessage(transactionMessage));
+        builder.setTransactionId(transactionId);
+      }
       cachedEnvelope = builder.build();
     }
     return cachedEnvelope;
+  }
+
+  public Envelope.TransactionMessage contextTransactionMessageToEnvelopeTransactionMessage(
+          Context.TransactionMessage message) {
+    switch (message) {
+      case PREPARE:
+        return Envelope.TransactionMessage.PREPARE;
+      case ABORT:
+        return Envelope.TransactionMessage.ABORT;
+      case COMMIT:
+        return Envelope.TransactionMessage.COMMIT;
+      default:
+        return Envelope.TransactionMessage.NONE;
+    }
   }
 
   private static boolean sameClassLoader(ClassLoader targetClassLoader, Object payload) {

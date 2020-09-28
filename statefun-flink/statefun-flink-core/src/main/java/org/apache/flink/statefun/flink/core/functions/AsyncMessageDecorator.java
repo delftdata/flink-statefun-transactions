@@ -25,6 +25,7 @@ import org.apache.flink.statefun.flink.core.message.MessageFactory;
 import org.apache.flink.statefun.sdk.Address;
 import org.apache.flink.statefun.sdk.AsyncOperationResult;
 import org.apache.flink.statefun.sdk.AsyncOperationResult.Status;
+import org.apache.flink.statefun.sdk.Context;
 
 /**
  * Wraps the original {@link Message} where it's payload is the user supplied metadata associated
@@ -100,6 +101,21 @@ final class AsyncMessageDecorator<T> implements Message {
   @Override
   public Message copy(MessageFactory context) {
     throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public Context.TransactionMessage getTransactionMessage() {
+    return message.getTransactionMessage();
+  }
+
+  @Override
+  public boolean isTransaction() {
+    return message.isTransaction();
+  }
+
+  @Override
+  public String getTransactionId() {
+    return message.getTransactionId();
   }
 
   @Override

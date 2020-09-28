@@ -1,0 +1,8 @@
+version: "3"
+services:
+  statefun-python-sdk-base-image:
+    container_name: statefun-python-sdk-base-image
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: martijn-thesis-statefun-python-sdk-base-image:latest

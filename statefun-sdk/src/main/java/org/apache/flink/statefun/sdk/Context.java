@@ -46,6 +46,29 @@ public interface Context {
    */
   Address caller();
 
+  // Get transaction information
+  TransactionMessage getTransactionMessage();
+  boolean isTransaction();
+  String getTransactionId();
+
+  enum TransactionMessage {
+    PREPARE,
+    ABORT,
+    COMMIT
+  }
+
+  /**
+   * Invokes another function with an input, identified by the target function's {@link Address}.
+   * As part of a transaction. Specific stage to be specified in arguments.
+   *
+   * @param to the target function's address.
+   * @param message the input to provide for the invocation.
+   * @param transactionId Transaction Id to identify active transactions
+   * @param transactionMessage To pass the state of the transaction
+   */
+  void sendTpcMessage(Address to, Object message, String transactionId,
+                      Context.TransactionMessage transactionMessage);
+
   /**
    * Invokes another function with an input, identified by the target function's {@link Address}.
    *

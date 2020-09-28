@@ -28,6 +28,7 @@ import org.apache.flink.statefun.flink.core.message.MessageFactory;
 import org.apache.flink.statefun.flink.core.metrics.FunctionTypeMetrics;
 import org.apache.flink.statefun.flink.core.state.State;
 import org.apache.flink.statefun.sdk.Address;
+import org.apache.flink.statefun.sdk.annotations.Persisted;
 import org.apache.flink.statefun.sdk.io.EgressIdentifier;
 
 final class ReusableContext implements ApplyingContext, InternalContext {
@@ -39,6 +40,9 @@ final class ReusableContext implements ApplyingContext, InternalContext {
   private final SideOutputSink sideOutputSink;
   private final State state;
   private final MessageFactory messageFactory;
+
+  private String transactionId;
+  private TransactionMessage transactionMessage;
 
   private Message in;
   private LiveFunction function;
@@ -62,17 +66,36 @@ final class ReusableContext implements ApplyingContext, InternalContext {
     this.state = Objects.requireNonNull(state);
     this.messageFactory = Objects.requireNonNull(messageFactory);
     this.asyncSink = Objects.requireNonNull(asyncSink);
+    this.transactionId = null;
+    this.transactionMessage = null;
   }
 
   @Override
   public void apply(LiveFunction function, Message inMessage) {
     this.in = inMessage;
     this.function = function;
+    this.transactionId = inMessage.getTransactionId();
+    this.transactionMessage = inMessage.getTransactionMessage();
     state.setCurrentKey(inMessage.target());
     function.metrics().incomingMessage();
     function.receive(this, in);
     in.postApply();
     this.in = null;
+  }
+
+  @Override
+  public void sendTpcMessage(Address to, Object what, String transactionId,
+                             TransactionMessage transactionMessage) {
+    Objects.requireNonNull(to);
+    Objects.requireNonNull(what);
+    Message envelope = messageFactory.from(self(), to, what, transactionId, transactionMessage);
+    if (thisPartition.contains(to)) {
+      localSink.accept(envelope);
+      function.metrics().outgoingLocalMessage();
+    } else {
+      remoteSink.accept(envelope);
+      function.metrics().outgoingRemoteMessage();
+    }
   }
 
   @Override
@@ -130,6 +153,22 @@ final class ReusableContext implements ApplyingContext, InternalContext {
   @Override
   public Address caller() {
     return in.source();
+  }
+
+  @Override
+  public TransactionMessage getTransactionMessage() {
+    return transactionMessage;
+  }
+
+  @Override
+  public boolean isTransaction() {
+    if(transactionMessage == null) { return false; }
+    return true;
+  }
+
+  @Override
+  public String getTransactionId() {
+    return transactionId;
   }
 
   @Override

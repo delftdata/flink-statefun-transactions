@@ -20,6 +20,7 @@ package org.apache.flink.statefun.flink.core.message;
 import java.io.IOException;
 import java.util.OptionalLong;
 import org.apache.flink.core.memory.DataOutputView;
+import org.apache.flink.statefun.sdk.Context;
 
 public interface Message extends RoutableMessage {
 
@@ -36,6 +37,11 @@ public interface Message extends RoutableMessage {
   OptionalLong isBarrierMessage();
 
   Message copy(MessageFactory context);
+
+  // Added for transactions
+  Context.TransactionMessage getTransactionMessage();
+  boolean isTransaction();
+  String getTransactionId();
 
   void writeTo(MessageFactory context, DataOutputView target) throws IOException;
 

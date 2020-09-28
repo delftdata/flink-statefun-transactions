@@ -27,6 +27,8 @@ public interface FunctionSpec {
 
   enum Kind {
     HTTP,
+    HTTP_TPC,
     GRPC
   }
+
 }

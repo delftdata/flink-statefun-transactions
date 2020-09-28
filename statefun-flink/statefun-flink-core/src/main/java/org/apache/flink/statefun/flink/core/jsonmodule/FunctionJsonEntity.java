@@ -44,9 +44,7 @@ import org.apache.flink.statefun.flink.common.json.NamespaceNamePair;
 import org.apache.flink.statefun.flink.common.json.Selectors;
 import org.apache.flink.statefun.flink.core.grpcfn.GrpcFunctionProvider;
 import org.apache.flink.statefun.flink.core.grpcfn.GrpcFunctionSpec;
-import org.apache.flink.statefun.flink.core.httpfn.HttpFunctionProvider;
-import org.apache.flink.statefun.flink.core.httpfn.HttpFunctionSpec;
-import org.apache.flink.statefun.flink.core.httpfn.StateSpec;
+import org.apache.flink.statefun.flink.core.httpfn.*;
 import org.apache.flink.statefun.sdk.FunctionType;
 import org.apache.flink.statefun.sdk.StatefulFunctionProvider;
 import org.apache.flink.statefun.sdk.spi.StatefulFunctionModule.Binder;
@@ -117,6 +115,7 @@ final class FunctionJsonEntity implements JsonEntity {
     FunctionSpec.Kind kind =
         FunctionSpec.Kind.valueOf(functionKind.toUpperCase(Locale.getDefault()));
     FunctionType functionType = functionType(functionNode);
+
     switch (kind) {
       case HTTP:
         final HttpFunctionSpec.Builder specBuilder =
@@ -127,6 +126,7 @@ final class FunctionJsonEntity implements JsonEntity {
         for (StateSpec state : stateSpecParser.apply(functionNode)) {
           specBuilder.withState(state);
         }
+
         optionalMaxNumBatchRequests(functionNode).ifPresent(specBuilder::withMaxNumBatchRequests);
         optionalTimeoutDuration(functionNode, SpecPointers.TIMEOUT)
             .ifPresent(specBuilder::withMaxRequestDuration);
@@ -138,6 +138,21 @@ final class FunctionJsonEntity implements JsonEntity {
             .ifPresent(specBuilder::withWriteTimeoutDuration);
 
         return specBuilder.build();
+      case HTTP_TPC:
+        final TpcFunctionSpec.Builder tpcSpecBuilder =
+                TpcFunctionSpec.builder(functionType, functionUri(functionNode));
+
+        optionalMaxNumBatchRequests(functionNode).ifPresent(tpcSpecBuilder::withMaxNumBatchRequests);
+        optionalTimeoutDuration(functionNode, SpecPointers.TIMEOUT)
+                .ifPresent(tpcSpecBuilder::withMaxRequestDuration);
+        optionalTimeoutDuration(functionNode, SpecPointers.CONNECT_TIMEOUT)
+                .ifPresent(tpcSpecBuilder::withConnectTimeoutDuration);
+        optionalTimeoutDuration(functionNode, SpecPointers.READ_TIMEOUT)
+                .ifPresent(tpcSpecBuilder::withReadTimeoutDuration);
+        optionalTimeoutDuration(functionNode, SpecPointers.WRITE_TIMEOUT)
+                .ifPresent(tpcSpecBuilder::withWriteTimeoutDuration);
+
+        return tpcSpecBuilder.build();
       case GRPC:
         return new GrpcFunctionSpec(functionType, functionAddress(functionNode));
       default:
@@ -258,6 +273,10 @@ final class FunctionJsonEntity implements JsonEntity {
       case GRPC:
         return new GrpcFunctionProvider(
             transformValues(definedFunctions, GrpcFunctionSpec.class::cast));
+      case HTTP_TPC:
+        return new TpcFunctionProvider(
+                transformValues(definedFunctions, TpcFunctionSpec.class::cast)
+        );
       default:
         throw new IllegalStateException("Unexpected value: " + kind);
     }

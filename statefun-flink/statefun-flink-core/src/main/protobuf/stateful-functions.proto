@@ -45,4 +45,14 @@ message Envelope {
         Checkpoint checkpoint = 4;
         Payload payload = 3;
     }
+
+    // Used to describe these messages are part of a transaction
+    string transaction_id = 5;
+    enum TransactionMessage {
+        NONE = 0;
+        PREPARE = 1;
+        ABORT = 2;
+        COMMIT = 3;
+    }
+    TransactionMessage transaction_message = 6;
 }

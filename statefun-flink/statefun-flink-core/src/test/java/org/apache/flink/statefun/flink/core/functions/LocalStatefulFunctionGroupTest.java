@@ -124,6 +124,26 @@ public class LocalStatefulFunctionGroupTest {
     }
 
     @Override
+    public TransactionMessage getTransactionMessage() {
+      return null;
+    }
+
+    @Override
+    public boolean isTransaction() {
+      return false;
+    }
+
+    @Override
+    public String getTransactionId() {
+      return null;
+    }
+
+    @Override
+    public void sendTpcMessage(Address to, Object message, String transactionId, TransactionMessage transactionMessage) {
+      return;
+    }
+
+    @Override
     public void send(Address to, Object message) {}
 
     @Override

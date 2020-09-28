@@ -39,13 +39,13 @@ message Address {
 }
 
 // -------------------------------------------------------------------------------------------------------------------
-// Messages sent to a Remote Function  
+// Messages sent to a Remote Function
 // -------------------------------------------------------------------------------------------------------------------
 
-// The following section contains all the message types that are sent 
+// The following section contains all the message types that are sent
 // from Flink to a remote function.
 message ToFunction {
-    // PersistedValue represents a PersistedValue's value that is managed by Flink on behalf of a remote function. 
+    // PersistedValue represents a PersistedValue's value that is managed by Flink on behalf of a remote function.
     message PersistedValue {
         // The unique name of the persisted state.
         string state_name = 1;
@@ -54,7 +54,7 @@ message ToFunction {
     }
 
     // Invocation represents a remote function call, it associated with an (optional) return address,
-    // and an argument. 
+    // and an argument.
     message Invocation {
         // The address of the function that requested the invocation (possibly absent)
         Address caller = 1;
@@ -79,10 +79,10 @@ message ToFunction {
 }
 
 // -------------------------------------------------------------------------------------------------------------------
-// Messages sent from a Remote Function  
+// Messages sent from a Remote Function
 // -------------------------------------------------------------------------------------------------------------------
 
-// The following section contains messages sent from a remote function back to Flink. 
+// The following section contains messages sent from a remote function back to Flink.
 message FromFunction {
     // MutatePersistedValueCommand represents a command sent from a remote function to Flink,
     // requesting a change to a persisted value.
@@ -97,9 +97,9 @@ message FromFunction {
     }
 
     // Invocation represents a remote function call, it associated with a (mandatory) target address,
-    // and an argument. 
+    // and an argument.
     message Invocation {
-        // The target function to invoke 
+        // The target function to invoke
         Address target = 1;
         // The invocation argument (aka the message sent to the target function)
         google.protobuf.Any argument = 2;
@@ -135,10 +135,27 @@ message FromFunction {
         repeated Invocation outgoing_messages = 2;
         repeated DelayedInvocation delayed_invocations = 3;
         repeated EgressMessage outgoing_egresses = 4;
+        bool failed = 5;
+    }
+
+    message TpcFunctionInvocationResponse {
+        repeated Invocation atomic_invocations = 1;
+        repeated Invocation outgoing_messages_on_success = 2;
+        repeated Invocation outgoing_messages_on_failure = 3;
+        repeated DelayedInvocation delayed_invocations_on_success = 4;
+        repeated DelayedInvocation delayed_invocations_on_failure = 5;
+        repeated EgressMessage outgoing_egresses_on_success = 6;
+        repeated EgressMessage outgoing_egresses_on_failure = 7;
     }
 
     oneof response {
         InvocationResponse invocation_result = 100;
+        TpcFunctionInvocationResponse tpc_function_invocation_result = 101;
+    }
+
+    message PreparePhaseResponse {
+        bool success = 1;
+        string transaction_id = 2;
     }
 }
 

@@ -27,6 +27,7 @@ import org.apache.flink.statefun.flink.core.generated.Checkpoint;
 import org.apache.flink.statefun.flink.core.generated.Envelope;
 import org.apache.flink.statefun.flink.core.generated.Payload;
 import org.apache.flink.statefun.sdk.Address;
+import org.apache.flink.statefun.sdk.Context;
 
 public final class MessageFactory {
 
@@ -52,6 +53,11 @@ public final class MessageFactory {
 
   public Message from(Address from, Address to, Object payload) {
     return new SdkMessage(from, to, payload);
+  }
+
+  public Message from(Address from, Address to, Object payload,
+                      String transactionId, Context.TransactionMessage transactionMessage) {
+    return new SdkMessage(from, to, payload, transactionId, transactionMessage);
   }
 
   // -------------------------------------------------------------------------------------------------------

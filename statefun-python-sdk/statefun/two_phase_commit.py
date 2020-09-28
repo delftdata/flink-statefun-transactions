@@ -31,7 +31,7 @@ from statefun.request_reply_pb2 import ToFunction
 from enum import Enum
 
 
-class InvocationContext:
+class TwoPhaseCommitInvocationContext:
     def __init__(self, functions):
         self.functions = functions
         self.batch = None
@@ -44,7 +44,7 @@ class InvocationContext:
         #
         # setup
         #
-        context = BatchContext(to_function.invocation.target, to_function.invocation.state)
+        context = TwoPhaseCommitBatchContext(to_function.invocation.target, to_function.invocation.state)
         target_function = self.functions.for_type(context.address.namespace, context.address.type)
         if target_function is None:
             raise ValueError("Unable to find a function of type ", target_function)
@@ -55,14 +55,15 @@ class InvocationContext:
 
     def complete(self):
         from_function = FromFunction()
-        invocation_result = from_function.invocation_result
+        invocation_result = from_function.tpc_function_invocation_result
         context = self.context
-        self.add_mutations(context, invocation_result)
-        self.add_outgoing_messages(context, invocation_result)
-        self.add_delayed_messages(context, invocation_result)
-        self.add_egress(context, invocation_result)
-        # Add the failed status to the invocation result 
-        self.add_failed_status(context, invocation_result)
+        self.add_atomic_invocations(context, invocation_result)
+        self.add_success_outgoing_messages(context, invocation_result)
+        self.add_failure_outgoing_messages(context, invocation_result)
+        self.add_success_delayed_messages(context, invocation_result)
+        self.add_failure_delayed_messages(context, invocation_result)
+        self.add_success_egress(context, invocation_result)
+        self.add_failure_egress(context, invocation_result)
         # reset the state for the next invocation
         self.batch = None
         self.context = None
@@ -71,9 +72,21 @@ class InvocationContext:
         return from_function.SerializeToString()
 
     @staticmethod
-    def add_outgoing_messages(context, invocation_result):
-        outgoing_messages = invocation_result.outgoing_messages
-        for typename, id, message in context.messages:
+    def add_atomic_invocations(context, invocation_result):
+        atomic_invocations = invocation_result.atomic_invocations
+        for typename, id, message in context.atomic_invocations:
+            outgoing = atomic_invocations.add()
+
+            namespace, type = parse_typename(typename)
+            outgoing.target.namespace = namespace
+            outgoing.target.type = type
+            outgoing.target.id = id
+            outgoing.argument.CopyFrom(message)
+
+    @staticmethod
+    def add_success_outgoing_messages(context, invocation_result):
+        outgoing_messages = invocation_result.outgoing_messages_on_success
+        for typename, id, message in context.messages_on_success:
             outgoing = outgoing_messages.add()
 
             namespace, type = parse_typename(typename)
@@ -83,23 +96,22 @@ class InvocationContext:
             outgoing.argument.CopyFrom(message)
 
     @staticmethod
-    def add_mutations(context, invocation_result):
-        for name, handle in context.states.items():
-            if not handle.modified:
-                continue
-            mutation = invocation_result.state_mutations.add()
+    def add_failure_outgoing_messages(context, invocation_result):
+        outgoing_messages = invocation_result.outgoing_messages_on_failure
+        for typename, id, message in context.messages_on_failure:
+            outgoing = outgoing_messages.add()
 
-            mutation.state_name = name
-            if handle.deleted:
-                mutation.mutation_type = FromFunction.PersistedValueMutation.MutationType.Value('DELETE')
-            else:
-                mutation.mutation_type = FromFunction.PersistedValueMutation.MutationType.Value('MODIFY')
-                mutation.state_value = handle.bytes()
+            namespace, type = parse_typename(typename)
+            outgoing.target.namespace = namespace
+            outgoing.target.type = type
+            outgoing.target.id = id
+            outgoing.argument.CopyFrom(message)
+
 
     @staticmethod
-    def add_delayed_messages(context, invocation_result):
-        delayed_invocations = invocation_result.delayed_invocations
-        for delay, typename, id, message in context.delayed_messages:
+    def add_success_delayed_messages(context, invocation_result):
+        delayed_invocations = invocation_result.delayed_invocations_on_success
+        for delay, typename, id, message in context.delayed_messages_on_success:
             outgoing = delayed_invocations.add()
 
             namespace, type = parse_typename(typename)
@@ -110,9 +122,22 @@ class InvocationContext:
             outgoing.argument.CopyFrom(message)
 
     @staticmethod
-    def add_egress(context, invocation_result):
-        outgoing_egresses = invocation_result.outgoing_egresses
-        for typename, message in context.egresses:
+    def add_failure_delayed_messages(context, invocation_result):
+        delayed_invocations = invocation_result.delayed_invocations_on_failure
+        for delay, typename, id, message in context.delayed_messages_on_failure:
+            outgoing = delayed_invocations.add()
+
+            namespace, type = parse_typename(typename)
+            outgoing.target.namespace = namespace
+            outgoing.target.type = type
+            outgoing.target.id = id
+            outgoing.delay_in_ms = delay
+            outgoing.argument.CopyFrom(message)
+
+    @staticmethod
+    def add_success_egress(context, invocation_result):
+        outgoing_egresses = invocation_result.outgoing_egresses_on_success
+        for typename, message in context.egresses_on_success:
             outgoing = outgoing_egresses.add()
 
             namespace, type = parse_typename(typename)
@@ -120,15 +145,21 @@ class InvocationContext:
             outgoing.egress_type = type
             outgoing.argument.CopyFrom(message)
 
-    # Add failed status to invocation result
     @staticmethod
-    def add_failed_status(context, invocation_result):
-        invocation_result.failed = context.failed
+    def add_failure_egress(context, invocation_result):
+        outgoing_egresses = invocation_result.outgoing_egresses_on_failure
+        for typename, message in context.egresses_on_failure:
+            outgoing = outgoing_egresses.add()
+
+            namespace, type = parse_typename(typename)
+            outgoing.egress_namespace = namespace
+            outgoing.egress_type = type
+            outgoing.argument.CopyFrom(message)
 
 
-class RequestReplyHandler:
+class TwoPhaseCommitHandler:
     def __init__(self, functions):
-        self.invocation_context = InvocationContext(functions)
+        self.invocation_context = TwoPhaseCommitInvocationContext(functions)
 
     def __call__(self, request_bytes):
         ic = self.invocation_context
@@ -137,7 +168,7 @@ class RequestReplyHandler:
         return ic.complete()
 
     @staticmethod
-    def handle_invocation(ic: InvocationContext):
+    def handle_invocation(ic: TwoPhaseCommitInvocationContext):
         batch = ic.batch
         context = ic.context
         target_function = ic.target_function
@@ -151,9 +182,9 @@ class RequestReplyHandler:
                 fun(context, unpacked)
 
 
-class AsyncRequestReplyHandler:
+class AsyncTwoPhaseCommitHandler:
     def __init__(self, functions):
-        self.invocation_context = InvocationContext(functions)
+        self.invocation_context = TwoPhaseCommitInvocationContext(functions)
 
     async def __call__(self, request_bytes):
         ic = self.invocation_context
@@ -162,7 +193,7 @@ class AsyncRequestReplyHandler:
         return ic.complete()
 
     @staticmethod
-    async def handle_invocation(ic: InvocationContext):
+    async def handle_invocation(ic: TwoPhaseCommitInvocationContext):
         batch = ic.batch
         context = ic.context
         target_function = ic.target_function
@@ -176,21 +207,20 @@ class AsyncRequestReplyHandler:
                 await fun(context, unpacked)
 
 
-class BatchContext(object):
+class TwoPhaseCommitBatchContext(object):
     def __init__(self, target, states):
-        # populate the state store with the eager state values provided in the batch
-        self.states = {s.state_name: AnyStateHandle(s.state_value) for s in states}
         # remember own address
         self.address = SdkAddress(target.namespace, target.type, target.id)
         # the caller address would be set for each individual invocation in the batch
         self.caller = None
         # outgoing messages
-        self.messages = []
-        self.delayed_messages = []
-        self.egresses = []
-        
-        # Add success status boolean to define success/failure state of atomic functions
-        self.failed = False
+        self.atomic_invocations = []
+        self.messages_on_success = []
+        self.messages_on_failure = []
+        self.delayed_messages_on_success = []
+        self.delayed_messages_on_failure = []
+        self.egresses_on_success = []
+        self.egresses_on_failure = []
 
     def prepare(self, invocation):
         """setup per invocation """
@@ -201,30 +231,11 @@ class BatchContext(object):
             self.caller = None
 
     # --------------------------------------------------------------------------------------
-    # state access
-    # --------------------------------------------------------------------------------------
-
-    def state(self, name):
-        if name not in self.states:
-            raise KeyError('unknown state name ' + name + ', states needed to be explicitly registered in module.yaml')
-        return self.states[name]
-
-    def __getitem__(self, name):
-        return self.state(name).value
-
-    def __delitem__(self, name):
-        state = self.state(name)
-        del state.value
-
-    def __setitem__(self, name, value):
-        state = self.state(name)
-        state.value = value
-
-    # --------------------------------------------------------------------------------------
     # messages
     # --------------------------------------------------------------------------------------
 
-    def send(self, typename: str, id: str, message: Any):
+
+    def send_atomic_invocation(self, typename: str, id: str, message: Any):
         """
         Send a message to a function of type and id.
 
@@ -232,6 +243,7 @@ class BatchContext(object):
         :param id: the id of the target function
         :param message: the message to send
         """
+
         if not typename:
             raise ValueError("missing type name")
         if not id:
@@ -239,9 +251,10 @@ class BatchContext(object):
         if not message:
             raise ValueError("missing message")
         out = (typename, id, message)
-        self.messages.append(out)
+        self.atomic_invocations.append(out)
 
-    def pack_and_send(self, typename: str, id: str, message):
+
+    def pack_and_send_atomic_invocation(self, typename: str, id: str, message):
         """
         Send a Protobuf message to a function.
 
@@ -256,31 +269,75 @@ class BatchContext(object):
             raise ValueError("missing message")
         any = Any()
         any.Pack(message)
-        self.send(typename, id, any)
+        self.send_atomic_invocation(typename, id, any)
 
-    def reply(self, message: Any):
+
+    def send(self, typename: str, id: str, message: Any, success: bool):
+        """
+        Send a message to a function of type and id.
+
+        :param typename: the target function type name, for example: "org.apache.flink.statefun/greeter"
+        :param id: the id of the target function
+        :param message: the message to send
+        :param success: whether to send this message on success or failure
+        """
+
+        if not typename:
+            raise ValueError("missing type name")
+        if not id:
+            raise ValueError("missing id")
+        if not message:
+            raise ValueError("missing message")
+        out = (typename, id, message)
+        if success:
+            self.messages_on_success.append(out)
+        else:
+            self.messages_on_failure.append(out)
+
+
+    def pack_and_send(self, typename: str, id: str, message, success: bool):
+        """
+        Send a Protobuf message to a function.
+
+        This variant of send, would first pack this message
+        into a google.protobuf.Any and then send it.
+
+        :param typename: the target function type name, for example: "org.apache.flink.statefun/greeter"
+        :param id: the id of the target function
+        :param message: the message to pack into an Any and the send.
+        :param success: whether to send this message on success or failure
+        """
+        if not message:
+            raise ValueError("missing message")
+        any = Any()
+        any.Pack(message)
+        self.send(typename, id, any, success)
+
+    def reply(self, message: Any, success: bool):
         """
         Reply to the sender (assuming there is a sender)
 
         :param message: the message to reply to.
+        :param success: whether to send this message on success or failure
         """
         caller = self.caller
         if not caller:
             raise AssertionError(
                 "Unable to reply without a caller. Was this message was sent directly from an ingress?")
-        self.send(caller.typename(), caller.identity, message)
+        self.send(caller.typename(), caller.identity, message, success)
 
-    def pack_and_reply(self, message):
+    def pack_and_reply(self, message, success: bool):
         """
         Reply to the sender (assuming there is a sender)
 
         :param message: the message to reply to.
+        :param success: whether to send this message on success or failure
         """
         any = Any()
         any.Pack(message)
-        self.reply(any)
+        self.reply(any, success)
 
-    def send_after(self, delay: timedelta, typename: str, id: str, message: Any):
+    def send_after(self, delay: timedelta, typename: str, id: str, message: Any, success: bool):
         """
         Send a message to a function of type and id.
 
@@ -288,6 +345,7 @@ class BatchContext(object):
         :param typename: the target function type name, for example: "org.apache.flink.statefun/greeter"
         :param id: the id of the target function
         :param message: the message to send
+        :param success: whether to send this message on success or failure
         """
         if not delay:
             raise ValueError("missing delay")
@@ -299,9 +357,12 @@ class BatchContext(object):
             raise ValueError("missing message")
         duration_ms = int(delay.total_seconds() * 1000.0)
         out = (duration_ms, typename, id, message)
-        self.delayed_messages.append(out)
+        if success:
+            self.delayed_messages_on_success.append(out)
+        else:
+            self.delayed_messages_on_failure.append(out)
 
-    def pack_and_send_after(self, delay: timedelta, typename: str, id: str, message):
+    def pack_and_send_after(self, delay: timedelta, typename: str, id: str, message, success: bool):
         """
         Send a message to a function of type and id.
 
@@ -309,14 +370,15 @@ class BatchContext(object):
         :param typename: the target function type name, for example: "org.apache.flink.statefun/greeter"
         :param id: the id of the target function
         :param message: the message to send
+        :param success: whether to send this message on success or failure
         """
         if not message:
             raise ValueError("missing message")
         any = Any()
         any.Pack(message)
-        self.send_after(delay, typename, id, any)
+        self.send_after(delay, typename, id, any, success)
 
-    def send_egress(self, typename, message: Any):
+    def send_egress(self, typename, message: Any, success: bool):
         """
         Sends a message to an egress defined by @typename
         :param typename: an egress identifier of the form <namespace>/<name>
@@ -326,19 +388,23 @@ class BatchContext(object):
             raise ValueError("missing type name")
         if not message:
             raise ValueError("missing message")
-        self.egresses.append((typename, message))
+        if success:
+            self.egresses_on_success.append((typename, message))
+        else:
+            self.egresses_on_failure.append((typename, message))
 
-    def pack_and_send_egress(self, typename, message):
+    def pack_and_send_egress(self, typename, message, success: bool):
         """
         Sends a message to an egress defined by @typename
         :param typename: an egress identifier of the form <namespace>/<name>
         :param message: the message to send.
+        :param success: whether to send this message on success or failure
         """
         if not message:
             raise ValueError("missing message")
         any = Any()
         any.Pack(message)
-        self.send_egress(typename, any)
+        self.send_egress(typename, any, success)
 
     # --------------------------------------------------------------------------------------
     # failure status for atomic messages
