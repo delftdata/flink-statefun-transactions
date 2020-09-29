@@ -19,7 +19,7 @@ package org.apache.flink.statefun.flink.core.reqreply;
 
 import static org.apache.flink.statefun.flink.core.TestUtils.FUNCTION_1_ADDR;
 import static org.apache.flink.statefun.flink.core.common.PolyglotUtil.polyglotAddressToSdkAddress;
-import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
@@ -51,6 +51,7 @@ import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction.Invoca
 import org.apache.flink.statefun.sdk.Address;
 import org.apache.flink.statefun.sdk.AsyncOperationResult;
 import org.apache.flink.statefun.sdk.AsyncOperationResult.Status;
+import org.apache.flink.statefun.sdk.Context;
 import org.apache.flink.statefun.sdk.FunctionType;
 import org.apache.flink.statefun.sdk.io.EgressIdentifier;
 import org.junit.Test;
@@ -106,6 +107,304 @@ public class RequestReplyFunctionTest {
     functionUnderTest.invoke(context, successfulAsyncOperation());
 
     assertThat(client.capturedInvocationBatchSize(), is(2));
+  }
+
+  @Test
+  public void tpcPrepareMessageIsNotSentWithBatchBefore() {
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    // First send regular messages batch
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    // Send tpc prepare message
+    setTpcPrepareInContext("1", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+    assertThat(client.capturedInvocationBatchSize(), is(2));
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+    assertThat(client.capturedInvocationBatchSize(), is(1));
+  }
+
+  @Test
+  public void tpcPrepareMessageIsNotSentWithBatchAfter() {
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    // Send tpc prepare message
+    setTpcPrepareInContext("1", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+
+    // Send regular messages
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+    assertThat(client.capturedInvocationBatchSize(), is(1));
+  }
+
+  @Test
+  public void tpcPrepareMessageIsNotSentWithBatchBeforeOrAfter() {
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    // Send regular messages
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    // Send tpc prepare message
+    setTpcPrepareInContext("1", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+
+    // Send regular messages
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+
+    assertThat(client.capturedInvocationBatchSize(), is(1));
+  }
+
+  @Test
+  public void tpcNoBatchIsSentToFunctionAfterTpcPrepareResponse() {
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    // Send tpc prepare message
+    setTpcPrepareInContext("1", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+
+    // Send regular messages
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+
+    assertThat(client.capturedInvocationBatchSize(), not(2));
+  }
+
+  @Test
+  public void tpcMessagesSeparateBatches() {
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    // Send regular messages
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    // Send tpc prepare message
+    setTpcPrepareInContext("1", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+
+    // Send 2 regular messages
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    // Send tpc prepare message
+    setTpcPrepareInContext("2", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+
+    // Send 3 regular messages
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    // Send first batch (1 message)
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+    assertThat(client.capturedInvocationBatchSize(), is(1));
+    // Send first tpc (1 message)
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+    assertThat(client.capturedInvocationBatchSize(), is(1));
+    // Complete tpc and remove lock and send next batch (2 messages)
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+    setTpcCommitInContext("1", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+    assertThat(client.capturedInvocationBatchSize(), is(2));
+    // Complete this batch and send next transaction (1 message)
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+    assertThat(client.capturedInvocationBatchSize(), is(1));
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+    setTpcAbortInContext("2", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+    assertThat(client.capturedInvocationBatchSize(), is(3));
+  }
+
+  @Test
+  public void tpcResponseMessageIsSentOnSuccess() {
+    // Send tpc prepare message
+    setTpcPrepareInContext("1", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+    // Successful response
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+
+    assertThat(context.messagesSent.size(), is(1));
+    Map.Entry<Address, Object> messageSent = context.messagesSent.get(0);
+    assertEquals(messageSent.getKey(), FUNCTION_1_ADDR);
+    assertThat(messageSent.getValue(), instanceOf(FromFunction.PreparePhaseResponse.class));
+    assertTrue(((FromFunction.PreparePhaseResponse) messageSent.getValue()).getSuccess());
+  }
+
+  @Test
+  public void tpcResponseMessageIsSentOnFailure() {
+    // Send tpc prepare message
+    setTpcPrepareInContext("1", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+    // Failing response
+    FromFunction fromFunction = FromFunction.getDefaultInstance().toBuilder()
+            .setInvocationResult(
+                    InvocationResponse.getDefaultInstance().toBuilder()
+                        .setFailed(true)
+                        .build())
+            .build();
+    functionUnderTest.invoke(context, successfulAsyncOperation(fromFunction));
+
+    assertThat(context.messagesSent.size(), is(1));
+    Map.Entry<Address, Object> messageSent = context.messagesSent.get(0);
+    assertEquals(messageSent.getKey(), FUNCTION_1_ADDR);
+    assertThat(messageSent.getValue(), instanceOf(FromFunction.PreparePhaseResponse.class));
+    assertFalse(((FromFunction.PreparePhaseResponse) messageSent.getValue()).getSuccess());
+  }
+
+  @Test
+  public void tpcStateIsModifiedOnCommit() {
+    setTpcPrepareInContext("1", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+    // A message returned from the function
+    // that asks to put "hello" into the session state.
+    FromFunction response =
+            FromFunction.newBuilder()
+                    .setInvocationResult(
+                            InvocationResponse.newBuilder()
+                                    .addStateMutations(
+                                            PersistedValueMutation.newBuilder()
+                                                    .setStateValue(ByteString.copyFromUtf8("hello"))
+                                                    .setMutationType(MutationType.MODIFY)
+                                                    .setStateName("session")))
+                    .build();
+    functionUnderTest.invoke(context, successfulAsyncOperation(response));
+
+    setTpcCommitInContext("1", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    assertThat(client.capturedState(0), is(ByteString.copyFromUtf8("hello")));
+  }
+
+  @Test
+  public void tpcStateIsNotModifiedOnAbort() {
+    setTpcPrepareInContext("1", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+    // A message returned from the function
+    // that asks to put "hello" into the session state.
+    FromFunction response =
+            FromFunction.newBuilder()
+                    .setInvocationResult(
+                            InvocationResponse.newBuilder()
+                                    .addStateMutations(
+                                            PersistedValueMutation.newBuilder()
+                                                    .setStateValue(ByteString.copyFromUtf8("hello"))
+                                                    .setMutationType(MutationType.MODIFY)
+                                                    .setStateName("session")))
+                    .build();
+    functionUnderTest.invoke(context, successfulAsyncOperation(response));
+
+    setTpcAbortInContext("1", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    assertThat(client.capturedState(0), not(ByteString.copyFromUtf8("hello")));
+  }
+
+  @Test
+  public void tpcAbortMessageWithWrongIdIgnored() {
+    setTpcPrepareInContext("1", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+
+    // Queue up regular requests
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    FromFunction response =
+            FromFunction.newBuilder()
+                    .setInvocationResult(
+                            InvocationResponse.newBuilder()
+                                    .addStateMutations(
+                                            PersistedValueMutation.newBuilder()
+                                                    .setStateValue(ByteString.copyFromUtf8("hello"))
+                                                    .setMutationType(MutationType.MODIFY)
+                                                    .setStateName("session")))
+                    .build();
+    functionUnderTest.invoke(context, successfulAsyncOperation(response));
+
+    setTpcAbortInContext("2", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+    assertThat(client.capturedInvocationBatchSize(), is(1));
+  }
+
+  @Test
+  public void tpcCommitMessageWithWrongIdIgnored() {
+    setTpcPrepareInContext("1", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+
+    // Queue up regular requests
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    FromFunction response =
+            FromFunction.newBuilder()
+                    .setInvocationResult(
+                            InvocationResponse.newBuilder()
+                                    .addStateMutations(
+                                            PersistedValueMutation.newBuilder()
+                                                    .setStateValue(ByteString.copyFromUtf8("hello"))
+                                                    .setMutationType(MutationType.MODIFY)
+                                                    .setStateName("session")))
+                    .build();
+    functionUnderTest.invoke(context, successfulAsyncOperation(response));
+
+    setTpcCommitInContext("2", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+    assertThat(client.capturedInvocationBatchSize(), is(1));
+  }
+
+  @Test
+  public void tpcIgnoreUnexpectedSuccessfulAsyncOperationWhileLocked() {
+    setTpcPrepareInContext("1", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+
+    // Queue up regular requests
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    // Complete tpc remote execution
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+    // No new batch should be send (function should be locked)
+    assertThat(client.capturedInvocationBatchSize(), is(1));
+
+    // Unexpected successfulAsyncOperation
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+    // Should not send the next batch of 3
+    assertThat(client.capturedInvocationBatchSize(), is(1));
   }
 
   @Test
@@ -246,6 +545,30 @@ public class RequestReplyFunctionTest {
     return new AsyncOperationResult<>(new Object(), Status.SUCCESS, fromFunction, null);
   }
 
+  private void setTpcPrepareInContext(String id, Address caller) {
+    context.setTransactionId(id);
+    context.caller = caller;
+    context.setTransactionMessage(Context.TransactionMessage.PREPARE);
+  }
+
+  private void setTpcCommitInContext(String id, Address caller) {
+    context.setTransactionId(id);
+    context.caller = caller;
+    context.setTransactionMessage(Context.TransactionMessage.COMMIT);
+  }
+
+  private void setTpcAbortInContext(String id, Address caller) {
+    context.setTransactionId(id);
+    context.caller = caller;
+    context.setTransactionMessage(Context.TransactionMessage.ABORT);
+  }
+
+  private void clearTpcInContext() {
+    context.setTransactionId(null);
+    context.caller = null;
+    context.setTransactionMessage(null);
+  }
+
   private static final class FakeClient implements RequestReplyClient {
     ToFunction wasSentToFunction;
     Supplier<FromFunction> fromFunction = FromFunction::getDefaultInstance;
@@ -286,9 +609,13 @@ public class RequestReplyFunctionTest {
     Address caller;
     boolean needsWaiting;
 
+    TransactionMessage transactionMessage;
+    String transactionId;
+
     // capture emitted messages
     List<Map.Entry<EgressIdentifier<?>, ?>> egresses = new ArrayList<>();
     List<Map.Entry<Duration, ?>> delayed = new ArrayList<>();
+    List<Map.Entry<Address, Object>> messagesSent = new ArrayList<>();
 
     @Override
     public void awaitAsyncOperationComplete() {
@@ -310,19 +637,30 @@ public class RequestReplyFunctionTest {
       return caller;
     }
 
+    public void setTransactionMessage(TransactionMessage t) {
+      transactionMessage = t;
+    }
+
     @Override
     public TransactionMessage getTransactionMessage() {
-      return null;
+      return transactionMessage;
     }
 
     @Override
     public boolean isTransaction() {
-      return false;
+      if (transactionMessage == null) {
+        return false;
+      }
+      return true;
+    }
+
+    public void setTransactionId(String id) {
+      transactionId = id;
     }
 
     @Override
     public String getTransactionId() {
-      return null;
+      return transactionId;
     }
 
     @Override
@@ -331,7 +669,9 @@ public class RequestReplyFunctionTest {
     }
 
     @Override
-    public void send(Address to, Object message) { return;}
+    public void send(Address to, Object message) {
+      messagesSent.add(new SimpleImmutableEntry<>(to, message));
+    }
 
     @Override
     public <T> void send(EgressIdentifier<T> egress, T message) {
