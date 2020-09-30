@@ -168,6 +168,9 @@ final class ReusableContext implements ApplyingContext, InternalContext {
 
   @Override
   public String getTransactionId() {
+    if (transactionId != null && transactionId.equals("")) {
+      return null;
+    }
     return transactionId;
   }
 

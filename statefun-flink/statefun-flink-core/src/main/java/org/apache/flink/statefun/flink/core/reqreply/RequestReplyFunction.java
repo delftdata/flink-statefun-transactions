@@ -24,11 +24,14 @@ import static org.apache.flink.statefun.flink.core.common.PolyglotUtil.sdkAddres
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+
+import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.flink.statefun.flink.core.backpressure.InternalContext;
 import org.apache.flink.statefun.flink.core.metrics.RemoteInvocationMetrics;
-import org.apache.flink.shaded.guava18.com.google.common.collect.Iterables;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.EgressMessage;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.InvocationResponse;
@@ -38,7 +41,6 @@ import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction.Invoca
 import org.apache.flink.statefun.sdk.*;
 import org.apache.flink.statefun.sdk.annotations.Persisted;
 import org.apache.flink.statefun.sdk.io.EgressIdentifier;
-import org.apache.flink.statefun.sdk.state.PersistedAppendingBuffer;
 import org.apache.flink.statefun.sdk.state.PersistedValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,15 +69,11 @@ public final class RequestReplyFunction implements StatefulFunction {
   @Persisted
   private final PersistedValue<Boolean> transactionInFlight =
           PersistedValue.of("transaction-in-flight", Boolean.class);
-
   @Persisted
-  private final PersistedAppendingBuffer<ToFunction.Invocation> batch =
-      PersistedAppendingBuffer.of("batch", ToFunction.Invocation.class);
+  private final PersistedValue<List> batch =
+      PersistedValue.of("batch", List.class);
   @Persisted
   private final PersistedRemoteFunctionValues managedStates;
-  @Persisted
-  private final PersistedValue<ToFunction.Invocation> nextTransaction =
-          PersistedValue.of("next-transaction", ToFunction.Invocation.class);
   @Persisted
   private final PersistedValue<Boolean> locked =
           PersistedValue.of("locked", Boolean.class);
@@ -105,7 +103,6 @@ public final class RequestReplyFunction implements StatefulFunction {
       if (context.isTransaction()) {
         onTransactionRequest(castedContext, (Any) input);
       } else {
-        LOGGER.info("Received regular invocation for remote function: " + context.self().type().toString());
         onRegularRequest(castedContext, (Any) input);
       }
       return;
@@ -117,9 +114,9 @@ public final class RequestReplyFunction implements StatefulFunction {
   }
 
   private void onRegularRequest(InternalContext context, Any message) {
+    LOGGER.info("Received regular invocation to function: " + context.self().type().toString());
     Invocation.Builder invocationBuilder = singeInvocationBuilder(context, message);
-    int inflightOrBatched = requestState.getOrDefault(-1);
-    if (inflightOrBatched < 0 && !locked.getOrDefault(false)) {
+    if (requestState.getOrDefault(-1) < 0 && !locked.getOrDefault(false)) {
       // no inflight requests, and nothing in the batch.
       // so we let this request to go through, and change state to indicate that:
       // a) there is a request in flight.
@@ -131,70 +128,95 @@ public final class RequestReplyFunction implements StatefulFunction {
     }
     // there is at least one request in flight (inflightOrBatched >= 0),
     // so we add that request to the batch.
-    batch.append(invocationBuilder.build());
-    inflightOrBatched++;
-    requestState.set(inflightOrBatched);
-    context.functionTypeMetrics().appendBacklogMessages(1);
-    if (isMaxNumBatchRequestsExceeded(inflightOrBatched)) {
-      // we are at capacity, can't add anything to the batch.
-      // we need to signal to the runtime that we are unable to process any new input
-      // and we must wait for our in flight asynchronous operation to complete before
-      // we are able to process more input.
-      context.awaitAsyncOperationComplete();
-    }
+    addToBatch(context, invocationBuilder);
   }
 
   private void onTransactionRequest(InternalContext context, Any message) {
     Invocation.Builder invocationBuilder = singeInvocationBuilder(context, message);
+
+    // Handle active transaction
+    if (transactionId.getOrDefault("-").equals(context.getTransactionId())
+            && locked.getOrDefault(false)) {
+      if (context.getTransactionMessage().equals(Context.TransactionMessage.ABORT)) {
+        LOGGER.info("Received transaction abort invocation for remote function: " + context.self().type().toString());
+        cleanUpAfterTxn(context);
+      } else if (context.getTransactionMessage().equals(Context.TransactionMessage.COMMIT)) {
+        LOGGER.info("Received transaction commit invocation for remote function: " + context.self().type().toString());
+        handleInvocationResponse(context, transactionResult.get());
+        cleanUpAfterTxn(context);
+      } else {
+        LOGGER.info("Received unexpected message for current transaction ID for remote function: " + context.self().type().toString());
+      }
+      return;
+    }
+
+    // Handled aborted transaction still in queue
+    if (context.getTransactionMessage().equals(Context.TransactionMessage.ABORT)) {
+      removeTransactionFromQueueIfQueued(context);
+      return;
+    }
+
+    // Handle new transaction prepare
     if (context.getTransactionMessage().equals(Context.TransactionMessage.PREPARE)) {
       LOGGER.info("Received transaction prepare invocation for remote function: " + context.self().type().toString());
-      nextTransaction.set(invocationBuilder.build());
-      transactionId.set(context.getTransactionId());
-      transactionResponseAddress.set(context.caller());
-      // Lock new requests to avoid extra waiting transactions
-      context.awaitAsyncOperationComplete();
       if (requestState.getOrDefault(-1) < 0 && !locked.getOrDefault(false)) {
-        startNextTransaction(context);
+        startTransaction(context, invocationBuilder, context.getTransactionId());
+      } else {
+        addToBatch(context, invocationBuilder);
       }
-    } else if (context.getTransactionMessage().equals(Context.TransactionMessage.ABORT)
-            && isCurrentTransaction(context.getTransactionId())) {
-      LOGGER.info("Received transaction abort invocation for remote function: " + context.self().type().toString());
-      cleanUpAfterTxn(context);
-    } else if (context.getTransactionMessage().equals(Context.TransactionMessage.COMMIT)
-            && isCurrentTransaction(context.getTransactionId())) {
-      LOGGER.info("Received transaction commit invocation for remote function: " + context.self().type().toString());
-      handleInvocationResponse(context, transactionResult.get());
-      cleanUpAfterTxn(context);
-    } else {
-      LOGGER.info("Received UNEXPECTED transaction invocation for remote function: " + context.self().type().toString());
+      return;
+    }
+
+    LOGGER.info("Received UNEXPECTED transaction invocation for remote function: " + context.self().type().toString());
+  }
+
+  private void removeTransactionFromQueueIfQueued(InternalContext context) {
+    List<ImmutablePair<String,ToFunction.Invocation>> batchList = batch.getOrDefault(new ArrayList());
+    for (int i = 0; i < batchList.size(); i++) {
+      ImmutablePair<String,ToFunction.Invocation> current = batchList.get(i);
+      if (current.getKey() != null && current.getKey().equals(context.getTransactionId())) {
+        batchList.remove(i);
+        batch.set(batchList);
+        context.functionTypeMetrics().consumeBacklogMessages(1);
+        requestState.set(requestState.get() - 1);
+        LOGGER.info("Removed transaction from the queue: " + context.self().type().toString());
+        break;
+      }
     }
   }
 
-  private void startNextTransaction(InternalContext context) {
+  private void addToBatch(InternalContext context, Invocation.Builder invocationBuilder) {
+    int inflightOrBatched = requestState.getOrDefault(-1);
+    List batchList = batch.getOrDefault(new ArrayList());
+    batchList.add(new ImmutablePair<>(context.getTransactionId(), invocationBuilder.build()));
+    batch.set(batchList);
+    inflightOrBatched++;
+    requestState.set(inflightOrBatched);
+    context.functionTypeMetrics().appendBacklogMessages(1);
+    if (isMaxNumBatchRequestsExceeded(inflightOrBatched)) {
+      LOGGER.info("Function is locked due to maxNumBatchRequests: " + context.self().type().toString());
+      context.awaitAsyncOperationComplete();
+    }
+  }
+
+  private void startTransaction(InternalContext context, Invocation.Builder invocationBuilder, String id) {
     LOGGER.info("Sending out transaction invocation to function: " + context.self().type().toString());
     requestState.set(0);
-    locked.set(true);
     transactionInFlight.set(true);
-    sendToFunction(context, nextTransaction.get().toBuilder());
-    nextTransaction.clear();
+    locked.set(true);
+    transactionId.set(id);
+    transactionResponseAddress.set(polyglotAddressToSdkAddress(invocationBuilder.getCaller()));
+    sendToFunction(context, invocationBuilder);
   }
 
   private void cleanUpAfterTxn(InternalContext context) {
     locked.clear();
+    transactionId.clear();
     transactionResponseAddress.clear();
     transactionResult.clear();
-    transactionId.clear();
-    nextTransaction.clear();
-    if (!transactionInFlight.getOrDefault(false)) {
+    if (!transactionInFlight.getOrDefault(false) ) {
       continueProcessingBatchedRequests(context);
     }
-  }
-
-  private boolean isCurrentTransaction(String transactionId) {
-    if (this.transactionId.getOrDefault("-").equals(transactionId)) {
-      return true;
-    }
-    return false;
   }
 
   private void onAsyncResult(
@@ -202,9 +224,6 @@ public final class RequestReplyFunction implements StatefulFunction {
     if (asyncResult.unknown()) {
       ToFunction batch = asyncResult.metadata();
       sendToFunction(context, batch);
-      if (isTransactionQueued()) {
-        context.awaitAsyncOperationComplete();
-      }
       return;
     }
 
@@ -212,7 +231,7 @@ public final class RequestReplyFunction implements StatefulFunction {
     if (transactionInFlight.getOrDefault(false)) {
       transactionInFlight.clear();
       if (locked.getOrDefault(false)) {
-        LOGGER.info("Received async result invocation for LOCKED TRANSACTION: " + context.self().type().toString());
+        LOGGER.info("Received async result invocation for LOCKED (CURRENT) TRANSACTION: " + context.self().type().toString());
         FromFunction.PreparePhaseResponse.Builder builder = FromFunction.PreparePhaseResponse.newBuilder();
         builder.setSuccess(!invocationResult.getFailed());
         builder.setTransactionId(transactionId.getOrDefault("-"));
@@ -220,9 +239,14 @@ public final class RequestReplyFunction implements StatefulFunction {
         Address to = transactionResponseAddress.get();
         context.send(to, builder.build());
       } else {
-        LOGGER.info("Received async result invocation for UNLOCKED TRANSACTION: " + context.self().type().toString());
+        LOGGER.info("Received async result invocation for UNLOCKED (/OLD) TRANSACTION: " + context.self().type().toString());
         continueProcessingBatchedRequests(context);
       }
+      return;
+    }
+
+    if (locked.getOrDefault(false)) {
+      LOGGER.info("Received UNEXPECTED regular async result invocation: " + context.self().type().toString());
     } else {
       LOGGER.info("Received regular async result invocation: " + context.self().type().toString());
       handleInvocationResponse(context, invocationResult);
@@ -231,24 +255,40 @@ public final class RequestReplyFunction implements StatefulFunction {
   }
 
   private void continueProcessingBatchedRequests(InternalContext context) {
-    // If there is a transaction waiting we never want to accept new requests since it may override
-    if (isTransactionQueued()) {
-      context.awaitAsyncOperationComplete();
+    List<ImmutablePair<String,ToFunction.Invocation>> batchList =
+            batch.getOrDefault(new ArrayList());
+    if (batchList.size() == 0) {
+      requestState.clear();
+      return;
     }
 
-    if (!Iterables.isEmpty(batch.view())) {
-      final InvocationBatchRequest.Builder nextBatch = getNextBatch();
-      final int numBatched = requestState.getOrDefault(-1);
-      if (numBatched < 0) {
-        throw new IllegalStateException("Got an unexpected async result");
+    // Finding first transaction
+    InvocationBatchRequest.Builder builder = InvocationBatchRequest.newBuilder();
+    int size = batchList.size();
+    for (int i = 0; i < size; i++) {
+      ImmutablePair<String, ToFunction.Invocation> current = batchList.get(0);
+      if (current.getKey() != null) {
+        if (i == 0) {
+          startTransaction(context, current.getValue().toBuilder(), current.getKey());
+          batchList.remove(0);
+        } else {
+          sendToFunction(context, builder);
+        }
+        batch.set(batchList);
+        requestState.set(batchList.size());
+        context.functionTypeMetrics().consumeBacklogMessages(builder.getInvocationsCount());
+        return;
       }
-      requestState.set(0);
-      batch.clear();
-      LOGGER.info("Sending out regular invocation to function: " + context.self().type().toString());
-      context.functionTypeMetrics().consumeBacklogMessages(numBatched);
-      sendToFunction(context, nextBatch);
-    } else if (isTransactionQueued()) {
-      startNextTransaction(context);
+      builder.addInvocations(current.getValue());
+      batchList.remove(0);
+    }
+
+    // No transaction found
+    if (builder.getInvocationsCount() > 0) {
+      sendToFunction(context, builder);
+      batch.set(batchList);
+      requestState.set(batchList.size());
+      context.functionTypeMetrics().consumeBacklogMessages(builder.getInvocationsCount());
     } else {
       requestState.clear();
     }
@@ -265,17 +305,6 @@ public final class RequestReplyFunction implements StatefulFunction {
       return fromFunction.getInvocationResult();
     }
     return InvocationResponse.getDefaultInstance();
-  }
-
-  private InvocationBatchRequest.Builder getNextBatch() {
-    InvocationBatchRequest.Builder builder = InvocationBatchRequest.newBuilder();
-    Iterable<Invocation> view = batch.view();
-    builder.addAllInvocations(view);
-    return builder;
-  }
-
-  private boolean isTransactionQueued() {
-    return nextTransaction.getOrDefault(Invocation.getDefaultInstance()) != Invocation.getDefaultInstance();
   }
 
   private void handleInvocationResponse(Context context, InvocationResponse invocationResult) {
