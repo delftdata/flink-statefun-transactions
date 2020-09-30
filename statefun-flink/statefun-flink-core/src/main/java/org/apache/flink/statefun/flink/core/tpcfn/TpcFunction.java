@@ -22,10 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 import static org.apache.flink.statefun.flink.core.common.PolyglotUtil.polyglotAddressToSdkAddress;
@@ -38,8 +35,8 @@ public class TpcFunction implements StatefulFunction {
     private static final Logger LOGGER = LoggerFactory.getLogger(TpcFunction.class);
 
     @Persisted
-    private final PersistedValue<LinkedList> batch =
-            PersistedValue.of("batch", LinkedList.class);
+    private final PersistedValue<List> batch =
+            PersistedValue.of("batch", List.class);
 
     @Persisted
     private final PersistedValue<Boolean> transactionInProgress =
@@ -100,8 +97,8 @@ public class TpcFunction implements StatefulFunction {
         if (!transactionInProgress.getOrDefault(false)) {
             startTransaction(context, invocationBuilder);
         } else {
-            LinkedList<ToFunction.Invocation.Builder> b =
-                    batch.getOrDefault(new LinkedList<ToFunction.Invocation.Builder>());
+            List<ToFunction.Invocation.Builder> b =
+                    batch.getOrDefault(new ArrayList());
             b.add(invocationBuilder);
             LOGGER.info("Add transaction request to queue.");
             batch.set(b);
@@ -119,6 +116,8 @@ public class TpcFunction implements StatefulFunction {
                 .equals(currentTransactionId.getOrDefault("."))) {
             LOGGER.info("Received prepare phase response for different " +
                     "transaction (probably old).");
+            LOGGER.info("CURRENT_TRANSACTION_ID:" + currentTransactionId.getOrDefault("."));
+            LOGGER.info("RESPONSE HAS: " + response.getTransactionId());
             return;
         }
 
@@ -157,14 +156,13 @@ public class TpcFunction implements StatefulFunction {
                 unpackInvocationOrThrow(context.self(), asyncResult);
         List<FromFunction.Invocation> atomicInvocations = invocationResult.getAtomicInvocationsList();
 
+        currentTransactionId.set(UUID.randomUUID().toString());
+
         for(FromFunction.Invocation invocation : atomicInvocations) {
             currentTransactionFunctions.set(invocation.getTarget(), Boolean.FALSE);
             final org.apache.flink.statefun.sdk.Address to = polyglotAddressToSdkAddress(invocation.getTarget());
             final Any message = invocation.getArgument();
-            if (currentTransactionId.get() == null) {
-                currentTransactionId.set(UUID.randomUUID().toString());
-            }
-            context.sendTpcMessage(to, message, currentTransactionId.getOrDefault("-"),
+            context.sendTpcMessage(to, message, currentTransactionId.get(),
                         Context.TransactionMessage.PREPARE);
         }
         currentTransactionResults.set(invocationResult);
@@ -193,7 +191,7 @@ public class TpcFunction implements StatefulFunction {
         for(Address address : currentTransactionFunctions.keys()) {
             final org.apache.flink.statefun.sdk.Address to = polyglotAddressToSdkAddress(address);
             final Any message = Any.pack(Payload.getDefaultInstance());
-                context.sendTpcMessage(to, message, currentTransactionId.getOrDefault("-"),
+                context.sendTpcMessage(to, message, currentTransactionId.get(),
                         Context.TransactionMessage.COMMIT);
         }
         handleEgressMessages(context, currentTransactionResults.get().getOutgoingEgressesOnSuccessList());
@@ -206,7 +204,7 @@ public class TpcFunction implements StatefulFunction {
         for(Address address : currentTransactionFunctions.keys()) {
             final org.apache.flink.statefun.sdk.Address to = polyglotAddressToSdkAddress(address);
             final Any message = Any.pack(Payload.getDefaultInstance());
-            context.sendTpcMessage(to, message, currentTransactionId.getOrDefault("-"),
+            context.sendTpcMessage(to, message, currentTransactionId.get(),
                     Context.TransactionMessage.ABORT);
         }
         handleEgressMessages(context, currentTransactionResults.get().getOutgoingEgressesOnFailureList());
@@ -217,19 +215,22 @@ public class TpcFunction implements StatefulFunction {
     private void cleanUp(InternalContext context) {
         currentTransactionResults.clear();
         currentTransactionFunctions.clear();
-        currentTransactionId.set(UUID.randomUUID().toString());
         transactionInProgress.clear();
+        currentTransactionId.clear();
         continueProcessingQueuedTransactions(context);
     }
 
     private void continueProcessingQueuedTransactions(InternalContext context) {
-        LinkedList<ToFunction.Invocation.Builder> b = batch.getOrDefault(new LinkedList<ToFunction.Invocation.Builder>());
-        ToFunction.Invocation.Builder elem = b.poll();
-        batch.set(b);
-        if (elem != null) {
-            LOGGER.info("Executing next transaction from queue!");
-            startTransaction(context, elem);
+        List<ToFunction.Invocation.Builder> b = batch.getOrDefault(new ArrayList());
+
+        if (b.size() == 0) {
+            return;
         }
+
+        ToFunction.Invocation.Builder elem = b.remove(0);
+        batch.set(b);
+        LOGGER.info("Executing next transaction from queue!");
+        startTransaction(context, elem);
     }
 
     private void handleEgressMessages(Context context, List<FromFunction.EgressMessage> egressMessages) {
