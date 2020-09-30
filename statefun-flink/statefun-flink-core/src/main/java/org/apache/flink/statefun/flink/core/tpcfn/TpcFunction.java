@@ -116,8 +116,6 @@ public class TpcFunction implements StatefulFunction {
                 .equals(currentTransactionId.getOrDefault("."))) {
             LOGGER.info("Received prepare phase response for different " +
                     "transaction (probably old).");
-            LOGGER.info("CURRENT_TRANSACTION_ID:" + currentTransactionId.getOrDefault("."));
-            LOGGER.info("RESPONSE HAS: " + response.getTransactionId());
             return;
         }
 
