@@ -110,6 +110,22 @@ public class RequestReplyFunctionTest {
   }
 
   @Test
+  public void batchIsAccumulatedWhileABatchedRequestIsInFlight() {
+    // send one message
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    // the following invocations should be queued and sent as a batch
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    // simulate a successful completion of the first operation
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    assertThat(client.capturedInvocationBatchSize(), is(2));
+  }
+
+  @Test
   public void tpcPrepareMessageIsNotSentWithBatchBefore() {
     functionUnderTest.invoke(context, Any.getDefaultInstance());
 
@@ -271,6 +287,42 @@ public class RequestReplyFunctionTest {
     assertEquals(messageSent.getKey(), FUNCTION_1_ADDR);
     assertThat(messageSent.getValue(), instanceOf(FromFunction.PreparePhaseResponse.class));
     assertFalse(((FromFunction.PreparePhaseResponse) messageSent.getValue()).getSuccess());
+  }
+
+  @Test
+  public void tpcResponseMessageIsSentForQueuedMessage() {
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    // Send tpc prepare message
+    setTpcPrepareInContext("1", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+
+    // Successful response for original messages
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+    // Successful response for transaction message
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+
+
+    assertThat(context.messagesSent.size(), is(1));
+    Map.Entry<Address, Object> messageSent = context.messagesSent.get(0);
+    assertEquals(messageSent.getKey(), FUNCTION_1_ADDR);
+    assertThat(messageSent.getValue(), instanceOf(FromFunction.PreparePhaseResponse.class));
+    assertTrue(((FromFunction.PreparePhaseResponse) messageSent.getValue()).getSuccess());
+  }
+
+  @Test
+  public void tpcRegularRequestsFromBatch() {
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    setTpcPrepareInContext("1", FUNCTION_1_ADDR);
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    clearTpcInContext();
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+
+    assertThat(context.messagesSent.size(), is(0));
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+    assertThat(context.messagesSent.size(), is(1));
   }
 
   @Test
@@ -660,6 +712,9 @@ public class RequestReplyFunctionTest {
 
     @Override
     public String getTransactionId() {
+      if (transactionId != null && transactionId.equals("")) {
+        return null;
+      }
       return transactionId;
     }
 
