@@ -29,7 +29,10 @@ import org.apache.flink.statefun.flink.core.common.ManagingResources;
 import org.apache.flink.statefun.flink.core.reqreply.PersistedRemoteFunctionValues;
 import org.apache.flink.statefun.flink.core.reqreply.RequestReplyClient;
 import org.apache.flink.statefun.flink.core.reqreply.RequestReplyFunction;
+import org.apache.flink.statefun.flink.core.sagasfn.SagasFunction;
+import org.apache.flink.statefun.flink.core.tpcfn.TpcFunction;
 import org.apache.flink.statefun.sdk.FunctionType;
+import org.apache.flink.statefun.sdk.StatefulFunction;
 import org.apache.flink.statefun.sdk.StatefulFunctionProvider;
 
 @NotThreadSafe
@@ -46,15 +49,28 @@ public class HttpFunctionProvider implements StatefulFunctionProvider, ManagingR
   }
 
   @Override
-  public RequestReplyFunction functionOfType(FunctionType type) {
+  public StatefulFunction functionOfType(FunctionType type) {
     HttpFunctionSpec spec = supportedTypes.get(type);
     if (spec == null) {
       throw new IllegalArgumentException("Unsupported type " + type);
     }
-    return new RequestReplyFunction(
-        new PersistedRemoteFunctionValues(spec.states()),
-        spec.maxNumBatchRequests(),
-        buildHttpClient(spec));
+    switch (spec.transaction()) {
+      case NONE:
+        return new RequestReplyFunction(
+                new PersistedRemoteFunctionValues(spec.states()),
+                spec.maxNumBatchRequests(),
+                buildHttpClient(spec));
+      case TPC:
+        return new TpcFunction(
+                spec.maxNumBatchRequests(),
+                buildHttpClient(spec));
+      case SAGAS:
+        return new SagasFunction(
+                spec.maxNumBatchRequests(),
+                buildHttpClient(spec));
+      default:
+        throw new IllegalArgumentException("Unsupported transaction setting " + spec.transaction());
+    }
   }
 
   public HttpFunctionSpec getFunctionSpec(FunctionType type) {

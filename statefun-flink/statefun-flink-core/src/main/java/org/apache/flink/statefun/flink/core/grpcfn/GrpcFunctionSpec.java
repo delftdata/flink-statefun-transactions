@@ -41,6 +41,9 @@ public final class GrpcFunctionSpec implements FunctionSpec {
     return Kind.GRPC;
   }
 
+  @Override
+  public Transaction transaction() { return Transaction.NONE; }
+
   public SocketAddress address() {
     return functionAddress;
   }

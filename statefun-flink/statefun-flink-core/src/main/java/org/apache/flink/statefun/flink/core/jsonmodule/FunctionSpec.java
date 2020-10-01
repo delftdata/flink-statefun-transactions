@@ -25,10 +25,18 @@ public interface FunctionSpec {
 
   Kind kind();
 
+  Transaction transaction();
+
   enum Kind {
     HTTP,
     HTTP_TPC,
     GRPC
+  }
+
+  enum Transaction {
+    NONE,
+    TPC,
+    SAGAS
   }
 
 }
