@@ -11,5 +11,5 @@ COPY protobuf/order_pb2.py /app/protobuf
 COPY gateway/order/order_gateway.py /app
 COPY gateway/kafka_utils.py /app
 
-CMD ["gunicorn", "-b", "0.0.0.0:8000", "-w", "1", "--worker-class", \
+CMD ["gunicorn", "-b", "0.0.0.0:80", "-w", "1", "--worker-class", \
     "aiohttp.GunicornWebWorker", "order_gateway:app"]

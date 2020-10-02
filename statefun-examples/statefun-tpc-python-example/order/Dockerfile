@@ -11,4 +11,4 @@ COPY protobuf/order_pb2.py /app
 COPY protobuf/user_pb2.py /app
 COPY protobuf/stock_pb2.py /app
 
-CMD ["gunicorn", "-b", "0.0.0.0:82", "-w 1", "order:app"]
+CMD ["gunicorn", "-b", "0.0.0.0:80", "-w 1", "order:app"]

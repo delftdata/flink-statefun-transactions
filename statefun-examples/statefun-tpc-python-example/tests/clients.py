@@ -1,7 +1,7 @@
 import requests
 
 class UserClient:
-    def __init__(self, url='http://0.0.0.0:8000/user'):
+    def __init__(self, url='http://127.0.0.1:81/user'):
         self.url = url
 
     def get(self, id):
@@ -23,7 +23,7 @@ class UserClient:
 
 
 class StockClient:
-    def __init__(self, url='http://0.0.0.0:8001/stock'):
+    def __init__(self, url='http://127.0.0.1:82/stock'):
         self.url = url
     
     def get(self, id):
@@ -45,7 +45,7 @@ class StockClient:
 
 
 class OrderClient:
-    def __init__(self, url='http://0.0.0.0:8002/order'):
+    def __init__(self, url='http://127.0.0.1:83/order'):
         self.url = url
     
     def get(self, id):

@@ -19,7 +19,7 @@ module:
             kind: http
             type: python-example/stock
           spec:
-            endpoint: http://stock-function:81/statefun
+            endpoint: http://stock-function:80/statefun
             states:
               - product
             maxNamBatchRequests: 500
@@ -29,17 +29,18 @@ module:
             kind: http
             type: python-example/order
           spec:
-            endpoint: http://order-function:82/statefun
+            endpoint: http://order-function:80/statefun
             states:
               - order
             maxNamBatchRequests: 500
             timeout: 2min
       - function:
           meta:
-            kind: http_tpc
+            kind: http
+            transaction: tpc
             type: python-example/checkout
           spec:
-            endpoint: http://checkout-function:83/statefun
+            endpoint: http://checkout-function:80/statefun
             maxNamBatchRequests: 500
             timeout: 2min
 
@@ -50,7 +51,7 @@ module:
             type: statefun.kafka.io/routable-protobuf-ingress
             id: python-example/kafka-ingress
           spec:
-            address: kafka-broker:9092
+            address: kafka-cluster-kafka-bootstrap:9092
             consumerGroupId: statefun
             topics:
               - topic: user-requests
@@ -73,7 +74,7 @@ module:
             type: statefun.kafka.io/generic-egress
             id: python-example/kafka-egress
           spec:
-            address: kafka-broker:9092
+            address: kafka-cluster-kafka-bootstrap:9092
             deliverySemantic:
               type: at-least-once
               transactionTimeoutMillis: 100000

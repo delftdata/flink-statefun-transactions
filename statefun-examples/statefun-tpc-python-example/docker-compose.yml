@@ -42,7 +42,7 @@ services:
       - kafka-broker
     links:
       - "master:master"
-      - "kafka-broker:kafka-broker"
+      - "kafka-broker:kafka-cluster-kafka-bootstrap"
     environment:
       - ROLE=worker
       - MASTER_HOST=master
@@ -54,46 +54,52 @@ services:
       build:
           context: .
           dockerfile: user/Dockerfile
-      ports:
-          - 80:80
+      expose:
+          - 80
   stock-function:
       build:
           context: .
           dockerfile: stock/Dockerfile
-      ports:
-          - 81:81
+      expose:
+          - 80
   order-function:
       build:
           context: .
           dockerfile: order/Dockerfile
-      ports:
-          - 82:82
+      expose:
+          - 80
   checkout-function:
       build:
           context: .
           dockerfile: checkout/Dockerfile
-      ports:
-          - 83:83
+      expose:
+          - 80
 
 ### Gateway services communicating with Kafka triggering the functions and fetching the responses
   user-gateway:
     hostname: user-gateway
     ports:
-      - 8000:8000
+      - 81:80
+    environment:
+      KAFKA_BROKER: "kafka-broker:9092"
     build:
       dockerfile: gateway/user/Dockerfile
       context: .
   stock-gateway:
     hostname: stock-gateway
     ports:
-      - 8001:8000
+      - 82:80
+    environment:
+      KAFKA_BROKER: "kafka-broker:9092"
     build:
       dockerfile: gateway/stock/Dockerfile
       context: .
   order-gateway:
     hostname: order-gateway
     ports:
-      - 8002:8000
+      - 83:80
+    environment:
+      KAFKA_BROKER: "kafka-broker:9092"
     build: 
       dockerfile: gateway/order/Dockerfile
       context: .

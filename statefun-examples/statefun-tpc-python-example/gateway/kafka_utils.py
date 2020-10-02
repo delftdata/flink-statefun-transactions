@@ -1,6 +1,7 @@
 import uuid
 import time
 import random
+import os
 
 import asyncio
 
@@ -9,7 +10,7 @@ from aiohttp import web
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer, ConsumerRebalanceListener
 from aiokafka.errors import KafkaConnectionError, NoBrokersAvailable
 
-KAFKA_BROKER = "kafka-broker:9092"
+KAFKA_BROKER = os.environ['KAFKA_BROKER']
 
 
 async def create_consumer(app: web.Application):
