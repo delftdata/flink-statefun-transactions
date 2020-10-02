@@ -58,6 +58,7 @@ final class FunctionJsonEntity implements JsonEntity {
   private static final class MetaPointers {
     private static final JsonPointer KIND = JsonPointer.compile("/function/meta/kind");
     private static final JsonPointer TYPE = JsonPointer.compile("/function/meta/type");
+    private static final JsonPointer TRANSACTION = JsonPointer.compile("/function/meta/transaction");
   }
 
   private static final class SpecPointers {
@@ -136,23 +137,9 @@ final class FunctionJsonEntity implements JsonEntity {
             .ifPresent(specBuilder::withReadTimeoutDuration);
         optionalTimeoutDuration(functionNode, SpecPointers.WRITE_TIMEOUT)
             .ifPresent(specBuilder::withWriteTimeoutDuration);
+        optionalTransaction(functionNode).ifPresent(specBuilder::withTransaction);
 
         return specBuilder.build();
-      case HTTP_TPC:
-        final TpcFunctionSpec.Builder tpcSpecBuilder =
-                TpcFunctionSpec.builder(functionType, functionUri(functionNode));
-
-        optionalMaxNumBatchRequests(functionNode).ifPresent(tpcSpecBuilder::withMaxNumBatchRequests);
-        optionalTimeoutDuration(functionNode, SpecPointers.TIMEOUT)
-                .ifPresent(tpcSpecBuilder::withMaxRequestDuration);
-        optionalTimeoutDuration(functionNode, SpecPointers.CONNECT_TIMEOUT)
-                .ifPresent(tpcSpecBuilder::withConnectTimeoutDuration);
-        optionalTimeoutDuration(functionNode, SpecPointers.READ_TIMEOUT)
-                .ifPresent(tpcSpecBuilder::withReadTimeoutDuration);
-        optionalTimeoutDuration(functionNode, SpecPointers.WRITE_TIMEOUT)
-                .ifPresent(tpcSpecBuilder::withWriteTimeoutDuration);
-
-        return tpcSpecBuilder.build();
       case GRPC:
         return new GrpcFunctionSpec(functionType, functionAddress(functionNode));
       default:
@@ -198,6 +185,15 @@ final class FunctionJsonEntity implements JsonEntity {
   private static Optional<Duration> optionalTimeoutDuration(
       JsonNode functionNode, JsonPointer timeoutPointer) {
     return Selectors.optionalTextAt(functionNode, timeoutPointer).map(TimeUtils::parseDuration);
+  }
+
+  private static Optional<FunctionSpec.Transaction> optionalTransaction(JsonNode functionNode) {
+    Optional<String> functionTransaction = Selectors.optionalTextAt(functionNode, MetaPointers.TRANSACTION);
+    if (functionTransaction.isPresent()) {
+      return Optional.of(FunctionSpec.Transaction.valueOf(functionTransaction.get().toUpperCase(Locale.getDefault())));
+    } else {
+      return Optional.empty();
+    }
   }
 
   private static Expiration stateTtlExpiration(JsonNode stateSpecNode) {
@@ -273,10 +269,6 @@ final class FunctionJsonEntity implements JsonEntity {
       case GRPC:
         return new GrpcFunctionProvider(
             transformValues(definedFunctions, GrpcFunctionSpec.class::cast));
-      case HTTP_TPC:
-        return new TpcFunctionProvider(
-                transformValues(definedFunctions, TpcFunctionSpec.class::cast)
-        );
       default:
         throw new IllegalStateException("Unexpected value: " + kind);
     }

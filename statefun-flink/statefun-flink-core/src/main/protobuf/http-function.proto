@@ -148,12 +148,28 @@ message FromFunction {
         repeated EgressMessage outgoing_egresses_on_failure = 7;
     }
 
+    message SagasFunctionPair {
+        Invocation initial_message = 1;
+        Invocation compensating_message = 2;
+    }
+
+    message SagasFunctionInvocationResponse {
+        repeated SagasFunctionPair invocation_pairs = 1;
+        repeated Invocation outgoing_messages_on_success = 2;
+        repeated Invocation outgoing_messages_on_failure = 3;
+        repeated DelayedInvocation delayed_invocations_on_success = 4;
+        repeated DelayedInvocation delayed_invocations_on_failure = 5;
+        repeated EgressMessage outgoing_egresses_on_success = 6;
+        repeated EgressMessage outgoing_egresses_on_failure = 7;
+    }
+
     oneof response {
         InvocationResponse invocation_result = 100;
         TpcFunctionInvocationResponse tpc_function_invocation_result = 101;
+        SagasFunctionInvocationResponse sagas_function_invocation_result = 102;
     }
 
-    message PreparePhaseResponse {
+    message ResponseToTransactionFunction {
         bool success = 1;
         string transaction_id = 2;
     }

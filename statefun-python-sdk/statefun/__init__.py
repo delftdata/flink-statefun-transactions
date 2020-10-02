@@ -21,7 +21,8 @@ from statefun.request_reply import RequestReplyHandler
 from statefun.request_reply import AsyncRequestReplyHandler
 from statefun.two_phase_commit import TwoPhaseCommitHandler
 from statefun.two_phase_commit import AsyncTwoPhaseCommitHandler
-
+from statefun.sagas import SagasHandler
+from statefun.sagas import AsyncSagasHandler
 
 from statefun.core import kafka_egress_record
 from statefun.core import kinesis_egress_record

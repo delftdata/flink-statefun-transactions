@@ -7,7 +7,7 @@ import org.apache.flink.statefun.flink.core.generated.Payload;
 import org.apache.flink.statefun.flink.core.metrics.RemoteInvocationMetrics;
 import org.apache.flink.statefun.flink.core.polyglot.generated.Address;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction;
-import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.PreparePhaseResponse;
+import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.ResponseToTransactionFunction;
 import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction;
 import org.apache.flink.statefun.flink.core.reqreply.RequestReplyClient;
 import org.apache.flink.statefun.flink.core.reqreply.ToFunctionRequestSummary;
@@ -78,11 +78,11 @@ public class TpcFunction implements StatefulFunction {
             return;
         }
 
-        if (input instanceof PreparePhaseResponse) {
+        if (input instanceof ResponseToTransactionFunction) {
             if (transactionInProgress.getOrDefault(false)) {
-                PreparePhaseResponse preparePhaseInvocationResponse =
-                        (PreparePhaseResponse) input;
-                handlePreparePhaseResponse(castedContext, preparePhaseInvocationResponse);
+                ResponseToTransactionFunction responseToTransactionFunction =
+                        (FromFunction.ResponseToTransactionFunction) input;
+                handleResponseToTransactionFunction(castedContext, responseToTransactionFunction);
             } else {
                 LOGGER.warn("Unexpected prepare phase result received.");
             }
@@ -111,7 +111,7 @@ public class TpcFunction implements StatefulFunction {
         return;
     }
 
-    private void handlePreparePhaseResponse(InternalContext context, PreparePhaseResponse response) {
+    private void handleResponseToTransactionFunction(InternalContext context, FromFunction.ResponseToTransactionFunction response) {
         if (!response.getTransactionId()
                 .equals(currentTransactionId.getOrDefault("."))) {
             LOGGER.info("Received prepare phase response for different " +

@@ -263,8 +263,8 @@ public class RequestReplyFunctionTest {
     assertThat(context.messagesSent.size(), is(1));
     Map.Entry<Address, Object> messageSent = context.messagesSent.get(0);
     assertEquals(messageSent.getKey(), FUNCTION_1_ADDR);
-    assertThat(messageSent.getValue(), instanceOf(FromFunction.PreparePhaseResponse.class));
-    assertTrue(((FromFunction.PreparePhaseResponse) messageSent.getValue()).getSuccess());
+    assertThat(messageSent.getValue(), instanceOf(FromFunction.ResponseToTransactionFunction.class));
+    assertTrue(((FromFunction.ResponseToTransactionFunction) messageSent.getValue()).getSuccess());
   }
 
   @Test
@@ -285,8 +285,8 @@ public class RequestReplyFunctionTest {
     assertThat(context.messagesSent.size(), is(1));
     Map.Entry<Address, Object> messageSent = context.messagesSent.get(0);
     assertEquals(messageSent.getKey(), FUNCTION_1_ADDR);
-    assertThat(messageSent.getValue(), instanceOf(FromFunction.PreparePhaseResponse.class));
-    assertFalse(((FromFunction.PreparePhaseResponse) messageSent.getValue()).getSuccess());
+    assertThat(messageSent.getValue(), instanceOf(FromFunction.ResponseToTransactionFunction.class));
+    assertFalse(((FromFunction.ResponseToTransactionFunction) messageSent.getValue()).getSuccess());
   }
 
   @Test
@@ -306,8 +306,8 @@ public class RequestReplyFunctionTest {
     assertThat(context.messagesSent.size(), is(1));
     Map.Entry<Address, Object> messageSent = context.messagesSent.get(0);
     assertEquals(messageSent.getKey(), FUNCTION_1_ADDR);
-    assertThat(messageSent.getValue(), instanceOf(FromFunction.PreparePhaseResponse.class));
-    assertTrue(((FromFunction.PreparePhaseResponse) messageSent.getValue()).getSuccess());
+    assertThat(messageSent.getValue(), instanceOf(FromFunction.ResponseToTransactionFunction.class));
+    assertTrue(((FromFunction.ResponseToTransactionFunction) messageSent.getValue()).getSuccess());
   }
 
   @Test

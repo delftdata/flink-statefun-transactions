@@ -1,0 +1,82 @@
+version: "1.0"
+module:
+  meta:
+    type: remote
+  spec:
+    functions:
+      - function:
+          meta:
+            kind: http
+            type: python-example/user
+          spec:
+            endpoint: http://user-function:80/statefun
+            states:
+              - user
+            maxNumBatchRequests: 500
+            timeout: 2min
+      - function:
+          meta:
+            kind: http
+            type: python-example/stock
+          spec:
+            endpoint: http://stock-function:80/statefun
+            states:
+              - product
+            maxNamBatchRequests: 500
+            timeout: 2min
+      - function:
+          meta:
+            kind: http
+            type: python-example/order
+          spec:
+            endpoint: http://order-function:80/statefun
+            states:
+              - order
+            maxNamBatchRequests: 500
+            timeout: 2min
+      - function:
+          meta:
+            kind: http
+            transaction: tpc
+            type: python-example/checkout
+          spec:
+            endpoint: http://checkout-function:80/statefun
+            maxNamBatchRequests: 500
+            timeout: 2min
+
+
+    ingresses:
+      - ingress:
+          meta:
+            type: statefun.kafka.io/routable-protobuf-ingress
+            id: python-example/kafka-ingress
+          spec:
+            address: kafka-cluster-kafka-bootstrap:9092
+            consumerGroupId: statefun
+            topics:
+              - topic: user-requests
+                typeUrl: com.googleapis/python_example.users.UserRequest
+                targets:
+                  - python-example/user
+              - topic: stock-requests
+                typeUrl: com.googleapis/python_example.stock.StockRequest
+                targets:
+                  - python-example/stock
+              - topic: order-requests
+                typeUrl: com.googleapis/python_example.order.OrderRequest
+                targets:
+                  - python-example/order
+  
+
+    egresses:
+      - egress:
+          meta:
+            type: statefun.kafka.io/generic-egress
+            id: python-example/kafka-egress
+          spec:
+            address: kafka-cluster-kafka-bootstrap:9092
+            deliverySemantic:
+              type: at-least-once
+              transactionTimeoutMillis: 100000
+            properties:
+              - partitioner.class: shared.KafkaResponsePartitioner

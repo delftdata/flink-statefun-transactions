@@ -232,7 +232,7 @@ public final class RequestReplyFunction implements StatefulFunction {
       transactionInFlight.clear();
       if (locked.getOrDefault(false)) {
         LOGGER.info("Received async result invocation for LOCKED (CURRENT) TRANSACTION: " + context.self().type().toString());
-        FromFunction.PreparePhaseResponse.Builder builder = FromFunction.PreparePhaseResponse.newBuilder();
+        FromFunction.ResponseToTransactionFunction.Builder builder = FromFunction.ResponseToTransactionFunction.newBuilder();
         builder.setSuccess(!invocationResult.getFailed());
         builder.setTransactionId(transactionId.getOrDefault("-"));
         transactionResult.set(invocationResult);

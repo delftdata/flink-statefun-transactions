@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package python_example.order;
+option java_package = "order.generated";
+option java_multiple_files = true;
+
+message GetOrderRequest {
+}
+
+message CreateOrderRequest {
+    string user_id = 1;
+}
+
+message DeleteOrderRequest{
+}
+
+message OrderItem  {
+    string product_id = 1;
+    int32 price_each = 2;
+    int32 amount = 3;
+}
+
+message AddToOrderRequest {
+    OrderItem order_item = 1;
+}
+
+message SubtractFromOrderRequest {
+    OrderItem order_item = 1;
+}
+
+message CheckoutOrderRequest {
+}
+
+message CancelCheckoutOrderRequest {
+}
+
+message PayOrderRequest {
+}
+
+message UndoPayOrderRequest {
+}
+
+message OrderRequest {
+    string request_id = 1;
+    string order_id = 2;
+
+    oneof message {
+        GetOrderRequest get_order = 3;
+        CreateOrderRequest create_order = 4;
+        DeleteOrderRequest delete_order = 5;
+        AddToOrderRequest add_to_order = 6;
+        SubtractFromOrderRequest subtract_from_order = 7;
+        CheckoutOrderRequest checkout_order = 8;
+        CancelCheckoutOrderRequest cancel_checkout_order = 9;
+        PayOrderRequest pay_order = 10;
+        UndoPayOrderRequest undo_pay_order = 11;
+    }
+}
+
+message OrderResponse {
+    string request_id = 1;
+    string order_id = 2;
+    int32 status_code = 3;
+    oneof payload {
+        string string = 4;
+        OrderState state = 5;
+      }
+}
+
+message OrderState {
+    string user_id = 1;
+    bool deleted = 2;
+    bool paid = 3;
+    map<string,OrderItem> order_items = 4;
+}

@@ -35,6 +35,7 @@ public final class HttpFunctionSpec implements FunctionSpec, Serializable {
   private static final Duration DEFAULT_HTTP_READ_TIMEOUT = Duration.ofSeconds(10);
   private static final Duration DEFAULT_HTTP_WRITE_TIMEOUT = Duration.ofSeconds(10);
   private static final Integer DEFAULT_MAX_NUM_BATCH_REQUESTS = 1000;
+  private static final Transaction DEFAULT_TRANSACTION = Transaction.NONE;
 
   private final FunctionType functionType;
   private final URI endpoint;
@@ -44,6 +45,7 @@ public final class HttpFunctionSpec implements FunctionSpec, Serializable {
   private final Duration readTimeout;
   private final Duration writeTimeout;
   private final int maxNumBatchRequests;
+  private final Transaction transaction;
 
   private HttpFunctionSpec(
       FunctionType functionType,
@@ -53,7 +55,8 @@ public final class HttpFunctionSpec implements FunctionSpec, Serializable {
       Duration connectTimeout,
       Duration readTimeout,
       Duration writeTimeout,
-      int maxNumBatchRequests) {
+      int maxNumBatchRequests,
+      Transaction transaction) {
     this.functionType = Objects.requireNonNull(functionType);
     this.endpoint = Objects.requireNonNull(endpoint);
     this.states = Objects.requireNonNull(states);
@@ -62,6 +65,7 @@ public final class HttpFunctionSpec implements FunctionSpec, Serializable {
     this.readTimeout = Objects.requireNonNull(readTimeout);
     this.writeTimeout = Objects.requireNonNull(writeTimeout);
     this.maxNumBatchRequests = maxNumBatchRequests;
+    this.transaction = transaction;
   }
 
   public static Builder builder(FunctionType functionType, URI endpoint) {
@@ -77,6 +81,9 @@ public final class HttpFunctionSpec implements FunctionSpec, Serializable {
   public Kind kind() {
     return Kind.HTTP;
   }
+
+  @Override
+  public Transaction transaction() { return transaction; }
 
   public URI endpoint() {
     return endpoint;
@@ -122,6 +129,7 @@ public final class HttpFunctionSpec implements FunctionSpec, Serializable {
     private Duration readTimeout = DEFAULT_HTTP_READ_TIMEOUT;
     private Duration writeTimeout = DEFAULT_HTTP_WRITE_TIMEOUT;
     private int maxNumBatchRequests = DEFAULT_MAX_NUM_BATCH_REQUESTS;
+    private Transaction transaction = DEFAULT_TRANSACTION;
 
     private Builder(FunctionType functionType, URI endpoint) {
       this.functionType = Objects.requireNonNull(functionType);
@@ -158,6 +166,11 @@ public final class HttpFunctionSpec implements FunctionSpec, Serializable {
       return this;
     }
 
+    public Builder withTransaction(Transaction transaction) {
+      this.transaction = transaction;
+      return this;
+    }
+
     public HttpFunctionSpec build() {
       validateTimeouts();
 
@@ -169,7 +182,8 @@ public final class HttpFunctionSpec implements FunctionSpec, Serializable {
           connectTimeout,
           readTimeout,
           writeTimeout,
-          maxNumBatchRequests);
+          maxNumBatchRequests,
+          transaction);
     }
 
     private Duration requireNonZeroDuration(Duration duration) {
