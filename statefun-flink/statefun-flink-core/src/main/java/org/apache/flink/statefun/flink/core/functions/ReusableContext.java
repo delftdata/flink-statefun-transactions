@@ -84,8 +84,8 @@ final class ReusableContext implements ApplyingContext, InternalContext {
   }
 
   @Override
-  public void sendTpcMessage(Address to, Object what, String transactionId,
-                             TransactionMessage transactionMessage) {
+  public void sendTransactionMessage(Address to, Object what, String transactionId,
+                                     TransactionMessage transactionMessage) {
     Objects.requireNonNull(to);
     Objects.requireNonNull(what);
     Message envelope = messageFactory.from(self(), to, what, transactionId, transactionMessage);

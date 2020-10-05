@@ -73,7 +73,7 @@ public class TpcFunction implements StatefulFunction {
                 onAsyncResult(castedContext, result);
             }
             else {
-                LOGGER.warn("Unexpected AsyncOperationResult received.");
+                LOGGER.warn("Unexpected AsyncOperation Result for function: " + context.self().type().toString());
             }
             return;
         }
@@ -160,7 +160,7 @@ public class TpcFunction implements StatefulFunction {
             currentTransactionFunctions.set(invocation.getTarget(), Boolean.FALSE);
             final org.apache.flink.statefun.sdk.Address to = polyglotAddressToSdkAddress(invocation.getTarget());
             final Any message = invocation.getArgument();
-            context.sendTpcMessage(to, message, currentTransactionId.get(),
+            context.sendTransactionMessage(to, message, currentTransactionId.get(),
                         Context.TransactionMessage.PREPARE);
         }
         currentTransactionResults.set(invocationResult);
@@ -177,9 +177,6 @@ public class TpcFunction implements StatefulFunction {
             LOGGER.info("Found TPC function invocation result.");
             return fromFunction.getTpcFunctionInvocationResult();
         }
-        if (fromFunction.hasInvocationResult()) {
-            LOGGER.info("Found HTTP function invocation result.");
-        }
         LOGGER.info("Did not find TPC function invocation result.");
         return FromFunction.TpcFunctionInvocationResponse.getDefaultInstance();
     }
@@ -189,7 +186,7 @@ public class TpcFunction implements StatefulFunction {
         for(Address address : currentTransactionFunctions.keys()) {
             final org.apache.flink.statefun.sdk.Address to = polyglotAddressToSdkAddress(address);
             final Any message = Any.pack(Payload.getDefaultInstance());
-                context.sendTpcMessage(to, message, currentTransactionId.get(),
+                context.sendTransactionMessage(to, message, currentTransactionId.get(),
                         Context.TransactionMessage.COMMIT);
         }
         handleEgressMessages(context, currentTransactionResults.get().getOutgoingEgressesOnSuccessList());
@@ -202,7 +199,7 @@ public class TpcFunction implements StatefulFunction {
         for(Address address : currentTransactionFunctions.keys()) {
             final org.apache.flink.statefun.sdk.Address to = polyglotAddressToSdkAddress(address);
             final Any message = Any.pack(Payload.getDefaultInstance());
-            context.sendTpcMessage(to, message, currentTransactionId.get(),
+            context.sendTransactionMessage(to, message, currentTransactionId.get(),
                     Context.TransactionMessage.ABORT);
         }
         handleEgressMessages(context, currentTransactionResults.get().getOutgoingEgressesOnFailureList());

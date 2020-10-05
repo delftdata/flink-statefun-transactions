@@ -92,7 +92,7 @@ class TestContext implements Context {
   }
 
   @Override
-  public void sendTpcMessage(Address to, Object message, String transactionId, TransactionMessage transactionMessage) {
+  public void sendTransactionMessage(Address to, Object message, String transactionId, TransactionMessage transactionMessage) {
     return;
   }
 

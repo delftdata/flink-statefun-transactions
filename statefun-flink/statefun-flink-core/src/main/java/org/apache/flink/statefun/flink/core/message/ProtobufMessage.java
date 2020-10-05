@@ -89,6 +89,8 @@ final class ProtobufMessage implements Message {
         return Context.TransactionMessage.ABORT;
       case COMMIT:
         return Context.TransactionMessage.COMMIT;
+      case SAGAS:
+        return Context.TransactionMessage.SAGAS;
     }
     return null;
   }

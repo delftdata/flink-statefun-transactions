@@ -54,7 +54,8 @@ public interface Context {
   enum TransactionMessage {
     PREPARE,
     ABORT,
-    COMMIT
+    COMMIT,
+    SAGAS
   }
 
   /**
@@ -66,8 +67,8 @@ public interface Context {
    * @param transactionId Transaction Id to identify active transactions
    * @param transactionMessage To pass the state of the transaction
    */
-  void sendTpcMessage(Address to, Object message, String transactionId,
-                      Context.TransactionMessage transactionMessage);
+  void sendTransactionMessage(Address to, Object message, String transactionId,
+                              Context.TransactionMessage transactionMessage);
 
   /**
    * Invokes another function with an input, identified by the target function's {@link Address}.
