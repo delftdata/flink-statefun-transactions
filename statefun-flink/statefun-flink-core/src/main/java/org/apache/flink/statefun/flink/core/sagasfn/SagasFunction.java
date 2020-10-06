@@ -144,7 +144,7 @@ public class SagasFunction implements StatefulFunction {
         Address caller = sdkAddressToPolyglotAddress(context.caller());
         Boolean callerSuccess = currentTransactionFunctions.get(caller);
 
-        if (callerSuccess.equals(Boolean.FALSE) || callerSuccess.equals(Boolean.TRUE)) {
+        if (callerSuccess != null) {
             throw new StatefulFunctionInvocationException(
                     context.self().type(),
                     new IllegalAccessException("Invalid response to ongoing transaction."));
@@ -195,7 +195,8 @@ public class SagasFunction implements StatefulFunction {
         LOGGER.info("Handling failure case for SAGAS transaction: " + context.self().type().toString());
         for (FromFunction.SagasFunctionPair invocationPair :
                 currentTransactionResults.get().getInvocationPairsList()) {
-            if (currentTransactionFunctions.get(invocationPair.getInitialMessage().getTarget()).equals(Boolean.TRUE)) {
+            Boolean success = currentTransactionFunctions.get(invocationPair.getInitialMessage().getTarget());
+            if (success != null && success.equals(Boolean.TRUE)) {
                 sendCompensatingMessage(context, invocationPair);
             }
         }
@@ -314,7 +315,7 @@ public class SagasFunction implements StatefulFunction {
 
     private boolean didAllFunctionsSucceed() {
         for (Boolean value : currentTransactionFunctions.values()) {
-            if (value != true) {
+            if (value == null || value.equals(Boolean.FALSE)) {
                 return false;
             }
         }
