@@ -49,9 +49,10 @@ public class SagasFunction implements StatefulFunction {
     private final PersistedValue<String> currentTransactionId =
             PersistedValue.of("current-transaction-id", String.class);
 
+    // 0 for not set, 1 for successful result, -1 for failure result
     @Persisted
-    private final PersistedTable<Address, Boolean> currentTransactionFunctions =
-            PersistedTable.of("current-transaction-functions", Address.class, Boolean.class);
+    private final PersistedTable<Address, Integer> currentTransactionFunctions =
+            PersistedTable.of("current-transaction-functions", Address.class, Integer.class);
 
     @Persisted
     private final PersistedValue<FromFunction.SagasFunctionInvocationResponse> currentTransactionResults =
@@ -123,7 +124,7 @@ public class SagasFunction implements StatefulFunction {
 
         for(FromFunction.SagasFunctionPair invocationPair : invocationPairs) {
             currentTransactionFunctions.set(
-                    invocationPair.getInitialMessage().getTarget(), null);
+                    invocationPair.getInitialMessage().getTarget(), 0);
             final org.apache.flink.statefun.sdk.Address to =
                     polyglotAddressToSdkAddress(invocationPair.getInitialMessage().getTarget());
             final Any message = invocationPair.getInitialMessage().getArgument();
@@ -142,16 +143,15 @@ public class SagasFunction implements StatefulFunction {
         }
 
         Address caller = sdkAddressToPolyglotAddress(context.caller());
-        Boolean callerSuccess = currentTransactionFunctions.get(caller);
 
-        if (callerSuccess != null) {
+        if (currentTransactionFunctions.get(caller) != 0) {
             throw new StatefulFunctionInvocationException(
                     context.self().type(),
                     new IllegalAccessException("Invalid response to ongoing transaction."));
         }
 
         if (response.getSuccess()) {
-            currentTransactionFunctions.set(caller, Boolean.TRUE);
+            currentTransactionFunctions.set(caller, 1);
             if (didAllFunctionsSucceed()) {
                 handleSuccess(context);
             }
@@ -159,12 +159,13 @@ public class SagasFunction implements StatefulFunction {
                 for (FromFunction.SagasFunctionPair invocationPair :
                         currentTransactionResults.get().getInvocationPairsList()) {
                     if (invocationPair.getInitialMessage().getTarget().equals(caller)) {
+                        LOGGER.info("Later sending compensating message: " + context.self().type().toString());
                         sendCompensatingMessage(context, invocationPair);
                     }
                 }
             }
         } else {
-            currentTransactionFunctions.set(caller, Boolean.FALSE);
+            currentTransactionFunctions.set(caller, -1);
             if (!transactionFailed.getOrDefault(false)) {
                 transactionFailed.set(Boolean.TRUE);
                 handleFailure(context);
@@ -195,8 +196,9 @@ public class SagasFunction implements StatefulFunction {
         LOGGER.info("Handling failure case for SAGAS transaction: " + context.self().type().toString());
         for (FromFunction.SagasFunctionPair invocationPair :
                 currentTransactionResults.get().getInvocationPairsList()) {
-            Boolean success = currentTransactionFunctions.get(invocationPair.getInitialMessage().getTarget());
-            if (success != null && success.equals(Boolean.TRUE)) {
+            int success = currentTransactionFunctions.get(invocationPair.getInitialMessage().getTarget());
+            if (success == 1) {
+                LOGGER.info("Directly sending compensating message: " + context.self().type().toString());
                 sendCompensatingMessage(context, invocationPair);
             }
         }
@@ -233,12 +235,14 @@ public class SagasFunction implements StatefulFunction {
             throw new IllegalStateException(
                     "Failure forwarding a message to a remote function " + self, result.throwable());
         }
+        LOGGER.info(result.toString());
         FromFunction fromFunction = result.value();
         if (fromFunction.hasSagasFunctionInvocationResult()) {
             LOGGER.info("Found SAGAs function invocation result.");
             return fromFunction.getSagasFunctionInvocationResult();
         }
         LOGGER.info("Did not find SAGAs function invocation result.");
+        LOGGER.info(fromFunction.toString());
         return FromFunction.SagasFunctionInvocationResponse.getDefaultInstance();
     }
 
@@ -314,8 +318,8 @@ public class SagasFunction implements StatefulFunction {
     }
 
     private boolean didAllFunctionsSucceed() {
-        for (Boolean value : currentTransactionFunctions.values()) {
-            if (value == null || value.equals(Boolean.FALSE)) {
+        for (int value : currentTransactionFunctions.values()) {
+            if (value == 0 || value == -1) {
                 return false;
             }
         }
@@ -323,8 +327,8 @@ public class SagasFunction implements StatefulFunction {
     }
 
     private boolean didAllFunctionsComplete() {
-        for (Boolean value : currentTransactionFunctions.values()) {
-            if (value == null) {
+        for (int value : currentTransactionFunctions.values()) {
+            if (value == 0) {
                 return false;
             }
         }

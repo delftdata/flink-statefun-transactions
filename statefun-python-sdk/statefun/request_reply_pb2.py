@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=b'\n7org.apache.flink.statefun.flink.core.polyglot.generatedP\001',
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\x13request-reply.proto\x12-org.apache.flink.statefun.flink.core.polyglot\x1a\x19google/protobuf/any.proto\"6\n\x07\x41\x64\x64ress\x12\x11\n\tnamespace\x18\x01 \x01(\t\x12\x0c\n\x04type\x18\x02 \x01(\t\x12\n\n\x02id\x18\x03 \x01(\t\"\xcf\x04\n\nToFunction\x12\x66\n\ninvocation\x18\x64 \x01(\x0b\x32P.org.apache.flink.statefun.flink.core.polyglot.ToFunction.InvocationBatchRequestH\x00\x1a\x39\n\x0ePersistedValue\x12\x12\n\nstate_name\x18\x01 \x01(\t\x12\x13\n\x0bstate_value\x18\x02 \x01(\x0c\x1a|\n\nInvocation\x12\x46\n\x06\x63\x61ller\x18\x01 \x01(\x0b\x32\x36.org.apache.flink.statefun.flink.core.polyglot.Address\x12&\n\x08\x61rgument\x18\x02 \x01(\x0b\x32\x14.google.protobuf.Any\x1a\x94\x02\n\x16InvocationBatchRequest\x12\x46\n\x06target\x18\x01 \x01(\x0b\x32\x36.org.apache.flink.statefun.flink.core.polyglot.Address\x12W\n\x05state\x18\x02 \x03(\x0b\x32H.org.apache.flink.statefun.flink.core.polyglot.ToFunction.PersistedValue\x12Y\n\x0binvocations\x18\x03 \x03(\x0b\x32\x44.org.apache.flink.statefun.flink.core.polyglot.ToFunction.InvocationB\t\n\x07request\"\xae\x11\n\x0c\x46romFunction\x12k\n\x11invocation_result\x18\x64 \x01(\x0b\x32N.org.apache.flink.statefun.flink.core.polyglot.FromFunction.InvocationResponseH\x00\x12\x83\x01\n\x1etpc_function_invocation_result\x18\x65 \x01(\x0b\x32Y.org.apache.flink.statefun.flink.core.polyglot.FromFunction.TpcFunctionInvocationResponseH\x00\x1a\xe1\x01\n\x16PersistedValueMutation\x12v\n\rmutation_type\x18\x01 \x01(\x0e\x32_.org.apache.flink.statefun.flink.core.polyglot.FromFunction.PersistedValueMutation.MutationType\x12\x12\n\nstate_name\x18\x02 \x01(\t\x12\x13\n\x0bstate_value\x18\x03 \x01(\x0c\"&\n\x0cMutationType\x12\n\n\x06\x44\x45LETE\x10\x00\x12\n\n\x06MODIFY\x10\x01\x1a|\n\nInvocation\x12\x46\n\x06target\x18\x01 \x01(\x0b\x32\x36.org.apache.flink.statefun.flink.core.polyglot.Address\x12&\n\x08\x61rgument\x18\x02 \x01(\x0b\x32\x14.google.protobuf.Any\x1a\x98\x01\n\x11\x44\x65layedInvocation\x12\x13\n\x0b\x64\x65lay_in_ms\x18\x01 \x01(\x03\x12\x46\n\x06target\x18\x02 \x01(\x0b\x32\x36.org.apache.flink.statefun.flink.core.polyglot.Address\x12&\n\x08\x61rgument\x18\x03 \x01(\x0b\x32\x14.google.protobuf.Any\x1a\x66\n\rEgressMessage\x12\x18\n\x10\x65gress_namespace\x18\x01 \x01(\t\x12\x13\n\x0b\x65gress_type\x18\x02 \x01(\t\x12&\n\x08\x61rgument\x18\x03 \x01(\x0b\x32\x14.google.protobuf.Any\x1a\xc6\x03\n\x12InvocationResponse\x12k\n\x0fstate_mutations\x18\x01 \x03(\x0b\x32R.org.apache.flink.statefun.flink.core.polyglot.FromFunction.PersistedValueMutation\x12\x61\n\x11outgoing_messages\x18\x02 \x03(\x0b\x32\x46.org.apache.flink.statefun.flink.core.polyglot.FromFunction.Invocation\x12j\n\x13\x64\x65layed_invocations\x18\x03 \x03(\x0b\x32M.org.apache.flink.statefun.flink.core.polyglot.FromFunction.DelayedInvocation\x12\x64\n\x11outgoing_egresses\x18\x04 \x03(\x0b\x32I.org.apache.flink.statefun.flink.core.polyglot.FromFunction.EgressMessage\x12\x0e\n\x06\x66\x61iled\x18\x05 \x01(\x08\x1a\xaf\x06\n\x1dTpcFunctionInvocationResponse\x12\x62\n\x12\x61tomic_invocations\x18\x01 \x03(\x0b\x32\x46.org.apache.flink.statefun.flink.core.polyglot.FromFunction.Invocation\x12l\n\x1coutgoing_messages_on_success\x18\x02 \x03(\x0b\x32\x46.org.apache.flink.statefun.flink.core.polyglot.FromFunction.Invocation\x12l\n\x1coutgoing_messages_on_failure\x18\x03 \x03(\x0b\x32\x46.org.apache.flink.statefun.flink.core.polyglot.FromFunction.Invocation\x12u\n\x1e\x64\x65layed_invocations_on_success\x18\x04 \x03(\x0b\x32M.org.apache.flink.statefun.flink.core.polyglot.FromFunction.DelayedInvocation\x12u\n\x1e\x64\x65layed_invocations_on_failure\x18\x05 \x03(\x0b\x32M.org.apache.flink.statefun.flink.core.polyglot.FromFunction.DelayedInvocation\x12o\n\x1coutgoing_egresses_on_success\x18\x06 \x03(\x0b\x32I.org.apache.flink.statefun.flink.core.polyglot.FromFunction.EgressMessage\x12o\n\x1coutgoing_egresses_on_failure\x18\x07 \x03(\x0b\x32I.org.apache.flink.statefun.flink.core.polyglot.FromFunction.EgressMessage\x1a?\n\x14PreparePhaseResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x16\n\x0etransaction_id\x18\x02 \x01(\tB\n\n\x08responseB;\n7org.apache.flink.statefun.flink.core.polyglot.generatedP\x01\x62\x06proto3'
+  serialized_pb=b'\n\x13request-reply.proto\x12-org.apache.flink.statefun.flink.core.polyglot\x1a\x19google/protobuf/any.proto\"6\n\x07\x41\x64\x64ress\x12\x11\n\tnamespace\x18\x01 \x01(\t\x12\x0c\n\x04type\x18\x02 \x01(\t\x12\n\n\x02id\x18\x03 \x01(\t\"\xcf\x04\n\nToFunction\x12\x66\n\ninvocation\x18\x64 \x01(\x0b\x32P.org.apache.flink.statefun.flink.core.polyglot.ToFunction.InvocationBatchRequestH\x00\x1a\x39\n\x0ePersistedValue\x12\x12\n\nstate_name\x18\x01 \x01(\t\x12\x13\n\x0bstate_value\x18\x02 \x01(\x0c\x1a|\n\nInvocation\x12\x46\n\x06\x63\x61ller\x18\x01 \x01(\x0b\x32\x36.org.apache.flink.statefun.flink.core.polyglot.Address\x12&\n\x08\x61rgument\x18\x02 \x01(\x0b\x32\x14.google.protobuf.Any\x1a\x94\x02\n\x16InvocationBatchRequest\x12\x46\n\x06target\x18\x01 \x01(\x0b\x32\x36.org.apache.flink.statefun.flink.core.polyglot.Address\x12W\n\x05state\x18\x02 \x03(\x0b\x32H.org.apache.flink.statefun.flink.core.polyglot.ToFunction.PersistedValue\x12Y\n\x0binvocations\x18\x03 \x03(\x0b\x32\x44.org.apache.flink.statefun.flink.core.polyglot.ToFunction.InvocationB\t\n\x07request\"\xd7\x1a\n\x0c\x46romFunction\x12k\n\x11invocation_result\x18\x64 \x01(\x0b\x32N.org.apache.flink.statefun.flink.core.polyglot.FromFunction.InvocationResponseH\x00\x12\x83\x01\n\x1etpc_function_invocation_result\x18\x65 \x01(\x0b\x32Y.org.apache.flink.statefun.flink.core.polyglot.FromFunction.TpcFunctionInvocationResponseH\x00\x12\x87\x01\n sagas_function_invocation_result\x18\x66 \x01(\x0b\x32[.org.apache.flink.statefun.flink.core.polyglot.FromFunction.SagasFunctionInvocationResponseH\x00\x1a\xe1\x01\n\x16PersistedValueMutation\x12v\n\rmutation_type\x18\x01 \x01(\x0e\x32_.org.apache.flink.statefun.flink.core.polyglot.FromFunction.PersistedValueMutation.MutationType\x12\x12\n\nstate_name\x18\x02 \x01(\t\x12\x13\n\x0bstate_value\x18\x03 \x01(\x0c\"&\n\x0cMutationType\x12\n\n\x06\x44\x45LETE\x10\x00\x12\n\n\x06MODIFY\x10\x01\x1a|\n\nInvocation\x12\x46\n\x06target\x18\x01 \x01(\x0b\x32\x36.org.apache.flink.statefun.flink.core.polyglot.Address\x12&\n\x08\x61rgument\x18\x02 \x01(\x0b\x32\x14.google.protobuf.Any\x1a\x98\x01\n\x11\x44\x65layedInvocation\x12\x13\n\x0b\x64\x65lay_in_ms\x18\x01 \x01(\x03\x12\x46\n\x06target\x18\x02 \x01(\x0b\x32\x36.org.apache.flink.statefun.flink.core.polyglot.Address\x12&\n\x08\x61rgument\x18\x03 \x01(\x0b\x32\x14.google.protobuf.Any\x1a\x66\n\rEgressMessage\x12\x18\n\x10\x65gress_namespace\x18\x01 \x01(\t\x12\x13\n\x0b\x65gress_type\x18\x02 \x01(\t\x12&\n\x08\x61rgument\x18\x03 \x01(\x0b\x32\x14.google.protobuf.Any\x1a\xc6\x03\n\x12InvocationResponse\x12k\n\x0fstate_mutations\x18\x01 \x03(\x0b\x32R.org.apache.flink.statefun.flink.core.polyglot.FromFunction.PersistedValueMutation\x12\x61\n\x11outgoing_messages\x18\x02 \x03(\x0b\x32\x46.org.apache.flink.statefun.flink.core.polyglot.FromFunction.Invocation\x12j\n\x13\x64\x65layed_invocations\x18\x03 \x03(\x0b\x32M.org.apache.flink.statefun.flink.core.polyglot.FromFunction.DelayedInvocation\x12\x64\n\x11outgoing_egresses\x18\x04 \x03(\x0b\x32I.org.apache.flink.statefun.flink.core.polyglot.FromFunction.EgressMessage\x12\x0e\n\x06\x66\x61iled\x18\x05 \x01(\x08\x1a\xaf\x06\n\x1dTpcFunctionInvocationResponse\x12\x62\n\x12\x61tomic_invocations\x18\x01 \x03(\x0b\x32\x46.org.apache.flink.statefun.flink.core.polyglot.FromFunction.Invocation\x12l\n\x1coutgoing_messages_on_success\x18\x02 \x03(\x0b\x32\x46.org.apache.flink.statefun.flink.core.polyglot.FromFunction.Invocation\x12l\n\x1coutgoing_messages_on_failure\x18\x03 \x03(\x0b\x32\x46.org.apache.flink.statefun.flink.core.polyglot.FromFunction.Invocation\x12u\n\x1e\x64\x65layed_invocations_on_success\x18\x04 \x03(\x0b\x32M.org.apache.flink.statefun.flink.core.polyglot.FromFunction.DelayedInvocation\x12u\n\x1e\x64\x65layed_invocations_on_failure\x18\x05 \x03(\x0b\x32M.org.apache.flink.statefun.flink.core.polyglot.FromFunction.DelayedInvocation\x12o\n\x1coutgoing_egresses_on_success\x18\x06 \x03(\x0b\x32I.org.apache.flink.statefun.flink.core.polyglot.FromFunction.EgressMessage\x12o\n\x1coutgoing_egresses_on_failure\x18\x07 \x03(\x0b\x32I.org.apache.flink.statefun.flink.core.polyglot.FromFunction.EgressMessage\x1a\xda\x01\n\x11SagasFunctionPair\x12_\n\x0finitial_message\x18\x01 \x01(\x0b\x32\x46.org.apache.flink.statefun.flink.core.polyglot.FromFunction.Invocation\x12\x64\n\x14\x63ompensating_message\x18\x02 \x01(\x0b\x32\x46.org.apache.flink.statefun.flink.core.polyglot.FromFunction.Invocation\x1a\xb6\x06\n\x1fSagasFunctionInvocationResponse\x12g\n\x10invocation_pairs\x18\x01 \x03(\x0b\x32M.org.apache.flink.statefun.flink.core.polyglot.FromFunction.SagasFunctionPair\x12l\n\x1coutgoing_messages_on_success\x18\x02 \x03(\x0b\x32\x46.org.apache.flink.statefun.flink.core.polyglot.FromFunction.Invocation\x12l\n\x1coutgoing_messages_on_failure\x18\x03 \x03(\x0b\x32\x46.org.apache.flink.statefun.flink.core.polyglot.FromFunction.Invocation\x12u\n\x1e\x64\x65layed_invocations_on_success\x18\x04 \x03(\x0b\x32M.org.apache.flink.statefun.flink.core.polyglot.FromFunction.DelayedInvocation\x12u\n\x1e\x64\x65layed_invocations_on_failure\x18\x05 \x03(\x0b\x32M.org.apache.flink.statefun.flink.core.polyglot.FromFunction.DelayedInvocation\x12o\n\x1coutgoing_egresses_on_success\x18\x06 \x03(\x0b\x32I.org.apache.flink.statefun.flink.core.polyglot.FromFunction.EgressMessage\x12o\n\x1coutgoing_egresses_on_failure\x18\x07 \x03(\x0b\x32I.org.apache.flink.statefun.flink.core.polyglot.FromFunction.EgressMessage\x1aH\n\x1dResponseToTransactionFunction\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x16\n\x0etransaction_id\x18\x02 \x01(\tB\n\n\x08responseB;\n7org.apache.flink.statefun.flink.core.polyglot.generatedP\x01\x62\x06proto3'
   ,
   dependencies=[google_dot_protobuf_dot_any__pb2.DESCRIPTOR,])
 
@@ -46,8 +46,8 @@ _FROMFUNCTION_PERSISTEDVALUEMUTATION_MUTATIONTYPE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=1195,
-  serialized_end=1233,
+  serialized_start=1333,
+  serialized_end=1371,
 )
 _sym_db.RegisterEnumDescriptor(_FROMFUNCTION_PERSISTEDVALUEMUTATION_MUTATIONTYPE)
 
@@ -298,8 +298,8 @@ _FROMFUNCTION_PERSISTEDVALUEMUTATION = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1008,
-  serialized_end=1233,
+  serialized_start=1146,
+  serialized_end=1371,
 )
 
 _FROMFUNCTION_INVOCATION = _descriptor.Descriptor(
@@ -336,8 +336,8 @@ _FROMFUNCTION_INVOCATION = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1235,
-  serialized_end=1359,
+  serialized_start=1373,
+  serialized_end=1497,
 )
 
 _FROMFUNCTION_DELAYEDINVOCATION = _descriptor.Descriptor(
@@ -381,8 +381,8 @@ _FROMFUNCTION_DELAYEDINVOCATION = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1362,
-  serialized_end=1514,
+  serialized_start=1500,
+  serialized_end=1652,
 )
 
 _FROMFUNCTION_EGRESSMESSAGE = _descriptor.Descriptor(
@@ -426,8 +426,8 @@ _FROMFUNCTION_EGRESSMESSAGE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1516,
-  serialized_end=1618,
+  serialized_start=1654,
+  serialized_end=1756,
 )
 
 _FROMFUNCTION_INVOCATIONRESPONSE = _descriptor.Descriptor(
@@ -485,8 +485,8 @@ _FROMFUNCTION_INVOCATIONRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1621,
-  serialized_end=2075,
+  serialized_start=1759,
+  serialized_end=2213,
 )
 
 _FROMFUNCTION_TPCFUNCTIONINVOCATIONRESPONSE = _descriptor.Descriptor(
@@ -558,27 +558,138 @@ _FROMFUNCTION_TPCFUNCTIONINVOCATIONRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=2078,
-  serialized_end=2893,
+  serialized_start=2216,
+  serialized_end=3031,
 )
 
-_FROMFUNCTION_PREPAREPHASERESPONSE = _descriptor.Descriptor(
-  name='PreparePhaseResponse',
-  full_name='org.apache.flink.statefun.flink.core.polyglot.FromFunction.PreparePhaseResponse',
+_FROMFUNCTION_SAGASFUNCTIONPAIR = _descriptor.Descriptor(
+  name='SagasFunctionPair',
+  full_name='org.apache.flink.statefun.flink.core.polyglot.FromFunction.SagasFunctionPair',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='success', full_name='org.apache.flink.statefun.flink.core.polyglot.FromFunction.PreparePhaseResponse.success', index=0,
+      name='initial_message', full_name='org.apache.flink.statefun.flink.core.polyglot.FromFunction.SagasFunctionPair.initial_message', index=0,
+      number=1, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='compensating_message', full_name='org.apache.flink.statefun.flink.core.polyglot.FromFunction.SagasFunctionPair.compensating_message', index=1,
+      number=2, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=3034,
+  serialized_end=3252,
+)
+
+_FROMFUNCTION_SAGASFUNCTIONINVOCATIONRESPONSE = _descriptor.Descriptor(
+  name='SagasFunctionInvocationResponse',
+  full_name='org.apache.flink.statefun.flink.core.polyglot.FromFunction.SagasFunctionInvocationResponse',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='invocation_pairs', full_name='org.apache.flink.statefun.flink.core.polyglot.FromFunction.SagasFunctionInvocationResponse.invocation_pairs', index=0,
+      number=1, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='outgoing_messages_on_success', full_name='org.apache.flink.statefun.flink.core.polyglot.FromFunction.SagasFunctionInvocationResponse.outgoing_messages_on_success', index=1,
+      number=2, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='outgoing_messages_on_failure', full_name='org.apache.flink.statefun.flink.core.polyglot.FromFunction.SagasFunctionInvocationResponse.outgoing_messages_on_failure', index=2,
+      number=3, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='delayed_invocations_on_success', full_name='org.apache.flink.statefun.flink.core.polyglot.FromFunction.SagasFunctionInvocationResponse.delayed_invocations_on_success', index=3,
+      number=4, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='delayed_invocations_on_failure', full_name='org.apache.flink.statefun.flink.core.polyglot.FromFunction.SagasFunctionInvocationResponse.delayed_invocations_on_failure', index=4,
+      number=5, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='outgoing_egresses_on_success', full_name='org.apache.flink.statefun.flink.core.polyglot.FromFunction.SagasFunctionInvocationResponse.outgoing_egresses_on_success', index=5,
+      number=6, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='outgoing_egresses_on_failure', full_name='org.apache.flink.statefun.flink.core.polyglot.FromFunction.SagasFunctionInvocationResponse.outgoing_egresses_on_failure', index=6,
+      number=7, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=3255,
+  serialized_end=4077,
+)
+
+_FROMFUNCTION_RESPONSETOTRANSACTIONFUNCTION = _descriptor.Descriptor(
+  name='ResponseToTransactionFunction',
+  full_name='org.apache.flink.statefun.flink.core.polyglot.FromFunction.ResponseToTransactionFunction',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='success', full_name='org.apache.flink.statefun.flink.core.polyglot.FromFunction.ResponseToTransactionFunction.success', index=0,
       number=1, type=8, cpp_type=7, label=1,
       has_default_value=False, default_value=False,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='transaction_id', full_name='org.apache.flink.statefun.flink.core.polyglot.FromFunction.PreparePhaseResponse.transaction_id', index=1,
+      name='transaction_id', full_name='org.apache.flink.statefun.flink.core.polyglot.FromFunction.ResponseToTransactionFunction.transaction_id', index=1,
       number=2, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
@@ -596,8 +707,8 @@ _FROMFUNCTION_PREPAREPHASERESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=2895,
-  serialized_end=2958,
+  serialized_start=4079,
+  serialized_end=4151,
 )
 
 _FROMFUNCTION = _descriptor.Descriptor(
@@ -622,10 +733,17 @@ _FROMFUNCTION = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='sagas_function_invocation_result', full_name='org.apache.flink.statefun.flink.core.polyglot.FromFunction.sagas_function_invocation_result', index=2,
+      number=102, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
-  nested_types=[_FROMFUNCTION_PERSISTEDVALUEMUTATION, _FROMFUNCTION_INVOCATION, _FROMFUNCTION_DELAYEDINVOCATION, _FROMFUNCTION_EGRESSMESSAGE, _FROMFUNCTION_INVOCATIONRESPONSE, _FROMFUNCTION_TPCFUNCTIONINVOCATIONRESPONSE, _FROMFUNCTION_PREPAREPHASERESPONSE, ],
+  nested_types=[_FROMFUNCTION_PERSISTEDVALUEMUTATION, _FROMFUNCTION_INVOCATION, _FROMFUNCTION_DELAYEDINVOCATION, _FROMFUNCTION_EGRESSMESSAGE, _FROMFUNCTION_INVOCATIONRESPONSE, _FROMFUNCTION_TPCFUNCTIONINVOCATIONRESPONSE, _FROMFUNCTION_SAGASFUNCTIONPAIR, _FROMFUNCTION_SAGASFUNCTIONINVOCATIONRESPONSE, _FROMFUNCTION_RESPONSETOTRANSACTIONFUNCTION, ],
   enum_types=[
   ],
   serialized_options=None,
@@ -640,7 +758,7 @@ _FROMFUNCTION = _descriptor.Descriptor(
     fields=[]),
   ],
   serialized_start=748,
-  serialized_end=2970,
+  serialized_end=4163,
 )
 
 _TOFUNCTION_PERSISTEDVALUE.containing_type = _TOFUNCTION
@@ -679,15 +797,30 @@ _FROMFUNCTION_TPCFUNCTIONINVOCATIONRESPONSE.fields_by_name['delayed_invocations_
 _FROMFUNCTION_TPCFUNCTIONINVOCATIONRESPONSE.fields_by_name['outgoing_egresses_on_success'].message_type = _FROMFUNCTION_EGRESSMESSAGE
 _FROMFUNCTION_TPCFUNCTIONINVOCATIONRESPONSE.fields_by_name['outgoing_egresses_on_failure'].message_type = _FROMFUNCTION_EGRESSMESSAGE
 _FROMFUNCTION_TPCFUNCTIONINVOCATIONRESPONSE.containing_type = _FROMFUNCTION
-_FROMFUNCTION_PREPAREPHASERESPONSE.containing_type = _FROMFUNCTION
+_FROMFUNCTION_SAGASFUNCTIONPAIR.fields_by_name['initial_message'].message_type = _FROMFUNCTION_INVOCATION
+_FROMFUNCTION_SAGASFUNCTIONPAIR.fields_by_name['compensating_message'].message_type = _FROMFUNCTION_INVOCATION
+_FROMFUNCTION_SAGASFUNCTIONPAIR.containing_type = _FROMFUNCTION
+_FROMFUNCTION_SAGASFUNCTIONINVOCATIONRESPONSE.fields_by_name['invocation_pairs'].message_type = _FROMFUNCTION_SAGASFUNCTIONPAIR
+_FROMFUNCTION_SAGASFUNCTIONINVOCATIONRESPONSE.fields_by_name['outgoing_messages_on_success'].message_type = _FROMFUNCTION_INVOCATION
+_FROMFUNCTION_SAGASFUNCTIONINVOCATIONRESPONSE.fields_by_name['outgoing_messages_on_failure'].message_type = _FROMFUNCTION_INVOCATION
+_FROMFUNCTION_SAGASFUNCTIONINVOCATIONRESPONSE.fields_by_name['delayed_invocations_on_success'].message_type = _FROMFUNCTION_DELAYEDINVOCATION
+_FROMFUNCTION_SAGASFUNCTIONINVOCATIONRESPONSE.fields_by_name['delayed_invocations_on_failure'].message_type = _FROMFUNCTION_DELAYEDINVOCATION
+_FROMFUNCTION_SAGASFUNCTIONINVOCATIONRESPONSE.fields_by_name['outgoing_egresses_on_success'].message_type = _FROMFUNCTION_EGRESSMESSAGE
+_FROMFUNCTION_SAGASFUNCTIONINVOCATIONRESPONSE.fields_by_name['outgoing_egresses_on_failure'].message_type = _FROMFUNCTION_EGRESSMESSAGE
+_FROMFUNCTION_SAGASFUNCTIONINVOCATIONRESPONSE.containing_type = _FROMFUNCTION
+_FROMFUNCTION_RESPONSETOTRANSACTIONFUNCTION.containing_type = _FROMFUNCTION
 _FROMFUNCTION.fields_by_name['invocation_result'].message_type = _FROMFUNCTION_INVOCATIONRESPONSE
 _FROMFUNCTION.fields_by_name['tpc_function_invocation_result'].message_type = _FROMFUNCTION_TPCFUNCTIONINVOCATIONRESPONSE
+_FROMFUNCTION.fields_by_name['sagas_function_invocation_result'].message_type = _FROMFUNCTION_SAGASFUNCTIONINVOCATIONRESPONSE
 _FROMFUNCTION.oneofs_by_name['response'].fields.append(
   _FROMFUNCTION.fields_by_name['invocation_result'])
 _FROMFUNCTION.fields_by_name['invocation_result'].containing_oneof = _FROMFUNCTION.oneofs_by_name['response']
 _FROMFUNCTION.oneofs_by_name['response'].fields.append(
   _FROMFUNCTION.fields_by_name['tpc_function_invocation_result'])
 _FROMFUNCTION.fields_by_name['tpc_function_invocation_result'].containing_oneof = _FROMFUNCTION.oneofs_by_name['response']
+_FROMFUNCTION.oneofs_by_name['response'].fields.append(
+  _FROMFUNCTION.fields_by_name['sagas_function_invocation_result'])
+_FROMFUNCTION.fields_by_name['sagas_function_invocation_result'].containing_oneof = _FROMFUNCTION.oneofs_by_name['response']
 DESCRIPTOR.message_types_by_name['Address'] = _ADDRESS
 DESCRIPTOR.message_types_by_name['ToFunction'] = _TOFUNCTION
 DESCRIPTOR.message_types_by_name['FromFunction'] = _FROMFUNCTION
@@ -775,10 +908,24 @@ FromFunction = _reflection.GeneratedProtocolMessageType('FromFunction', (_messag
     })
   ,
 
-  'PreparePhaseResponse' : _reflection.GeneratedProtocolMessageType('PreparePhaseResponse', (_message.Message,), {
-    'DESCRIPTOR' : _FROMFUNCTION_PREPAREPHASERESPONSE,
+  'SagasFunctionPair' : _reflection.GeneratedProtocolMessageType('SagasFunctionPair', (_message.Message,), {
+    'DESCRIPTOR' : _FROMFUNCTION_SAGASFUNCTIONPAIR,
     '__module__' : 'request_reply_pb2'
-    # @@protoc_insertion_point(class_scope:org.apache.flink.statefun.flink.core.polyglot.FromFunction.PreparePhaseResponse)
+    # @@protoc_insertion_point(class_scope:org.apache.flink.statefun.flink.core.polyglot.FromFunction.SagasFunctionPair)
+    })
+  ,
+
+  'SagasFunctionInvocationResponse' : _reflection.GeneratedProtocolMessageType('SagasFunctionInvocationResponse', (_message.Message,), {
+    'DESCRIPTOR' : _FROMFUNCTION_SAGASFUNCTIONINVOCATIONRESPONSE,
+    '__module__' : 'request_reply_pb2'
+    # @@protoc_insertion_point(class_scope:org.apache.flink.statefun.flink.core.polyglot.FromFunction.SagasFunctionInvocationResponse)
+    })
+  ,
+
+  'ResponseToTransactionFunction' : _reflection.GeneratedProtocolMessageType('ResponseToTransactionFunction', (_message.Message,), {
+    'DESCRIPTOR' : _FROMFUNCTION_RESPONSETOTRANSACTIONFUNCTION,
+    '__module__' : 'request_reply_pb2'
+    # @@protoc_insertion_point(class_scope:org.apache.flink.statefun.flink.core.polyglot.FromFunction.ResponseToTransactionFunction)
     })
   ,
   'DESCRIPTOR' : _FROMFUNCTION,
@@ -792,7 +939,9 @@ _sym_db.RegisterMessage(FromFunction.DelayedInvocation)
 _sym_db.RegisterMessage(FromFunction.EgressMessage)
 _sym_db.RegisterMessage(FromFunction.InvocationResponse)
 _sym_db.RegisterMessage(FromFunction.TpcFunctionInvocationResponse)
-_sym_db.RegisterMessage(FromFunction.PreparePhaseResponse)
+_sym_db.RegisterMessage(FromFunction.SagasFunctionPair)
+_sym_db.RegisterMessage(FromFunction.SagasFunctionInvocationResponse)
+_sym_db.RegisterMessage(FromFunction.ResponseToTransactionFunction)
 
 
 DESCRIPTOR._options = None

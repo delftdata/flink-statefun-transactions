@@ -167,6 +167,7 @@ public final class RequestReplyFunction implements StatefulFunction {
       } else {
         addToBatch(context, invocationBuilder);
       }
+      return;
     }
 
     // Handle new transaction prepare
@@ -216,7 +217,7 @@ public final class RequestReplyFunction implements StatefulFunction {
   }
 
   private void startSagasTransaction(InternalContext context, Invocation.Builder invocationBuilder, String id) {
-    LOGGER.info("Sending out transaction invocation to function: " + context.self().type().toString());
+    LOGGER.info("Sending out SAGAS - transaction invocation to function: " + context.self().type().toString());
     requestState.set(0);
     sagasInFlight.set(true);
     transactionId.set(id);
@@ -225,7 +226,7 @@ public final class RequestReplyFunction implements StatefulFunction {
   }
 
   private void startTpcTransaction(InternalContext context, Invocation.Builder invocationBuilder, String id) {
-    LOGGER.info("Sending out transaction invocation to function: " + context.self().type().toString());
+    LOGGER.info("Sending out TPC - transaction invocation to function: " + context.self().type().toString());
     requestState.set(0);
     tpcInFlight.set(true);
     locked.set(true);
@@ -276,6 +277,7 @@ public final class RequestReplyFunction implements StatefulFunction {
         handleInvocationResponse(context, invocationResult);
       }
       cleanUpAfterTransaction(context);
+      return;
     }
 
     if (locked.getOrDefault(false)) {
