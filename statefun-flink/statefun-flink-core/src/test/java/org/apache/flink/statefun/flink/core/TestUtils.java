@@ -192,7 +192,7 @@ public class TestUtils {
 
 
     @Override
-    public void sendTpcMessage(Address to, Object message, String id, TransactionMessage transactionMessage) {
+    public void sendTransactionMessage(Address to, Object message, String id, TransactionMessage transactionMessage) {
       tpcMessagesSent.add(new AbstractMap.SimpleImmutableEntry<>(to, message));
       transactionId = id;
     }

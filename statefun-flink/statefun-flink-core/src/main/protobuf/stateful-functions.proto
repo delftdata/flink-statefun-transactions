@@ -53,6 +53,7 @@ message Envelope {
         PREPARE = 1;
         ABORT = 2;
         COMMIT = 3;
+        SAGAS = 4;
     }
     TransactionMessage transaction_message = 6;
 }

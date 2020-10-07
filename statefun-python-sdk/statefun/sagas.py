@@ -257,7 +257,7 @@ class SagasBatchContext(object):
         if not message:
             raise ValueError("missing message")
         out = (typename, id, message, compensating_message)
-        self.atomic_invocations.append(out)
+        self.invocation_pairs.append(out)
 
 
     def pack_and_send_invocation_pair(self, typename: str, id: str, message, compensating_message):
@@ -279,7 +279,7 @@ class SagasBatchContext(object):
                 raise ValueError("missing message")
         compensating_any = Any()
         compensating_any.Pack(compensating_message)
-        self.send_atomic_invocation(typename, id, any, compensating_any)
+        self.send_invocation_pair(typename, id, any, compensating_any)
 
 
     def send(self, typename: str, id: str, message: Any, success: bool):
@@ -421,7 +421,7 @@ class SagasBatchContext(object):
     # --------------------------------------------------------------------------------------
     def set_failed(self, failed_status):
         """
-        Sets the fail attribute of the context to allow for atomic functions.
+        Sets the fail attribute of the context to allow for transaction functions.
         :param failed_status: true for a failed invocation otherwise false
         """
         self.failed = failed_status

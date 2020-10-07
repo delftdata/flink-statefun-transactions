@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-gateway
+spec:
+  type: LoadBalancer
+  selector:
+    service: order-gateway
+  ports:
+    - protocol: TCP
+      port: 83
+      targetPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-gateway
+spec:
+  selector:
+    matchLabels:
+      service: order-gateway
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        service: order-gateway
+    spec:
+      containers:
+        - name: order-gateway
+          image: "statefun-tpc-python-example_order-gateway:latest"
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          env:
+            - name: KAFKA_BROKER
+              value: 'kafka-cluster-kafka-bootstrap:9092'
+          resources:
+            requests:
+              memory: "400Mi"
+              cpu: "375m"
+            limits:
+              memory: "500Mi"
+              cpu: "400m"

@@ -1,0 +1,41 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-function
+spec:
+  selector:
+    matchLabels:
+      service: order-function
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        service: order-function
+    spec:
+      containers:
+        - name: order-function
+          image: statefun-tpc-python-example_order-function:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "0.25Gi"
+              cpu: "100m"
+            limits:
+              memory: "0.25Gi"
+              cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-function
+spec:
+  type: ClusterIP
+  selector:
+    service: order-function
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80

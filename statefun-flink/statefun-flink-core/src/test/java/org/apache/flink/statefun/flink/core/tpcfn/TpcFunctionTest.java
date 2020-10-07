@@ -11,7 +11,6 @@ import static org.apache.flink.statefun.flink.core.TestUtils.FUNCTION_2_ADDR;
 
 import static org.apache.flink.statefun.flink.core.common.PolyglotUtil.sdkAddressToPolyglotAddress;
 import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.not;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
@@ -113,6 +112,32 @@ public class TpcFunctionTest {
 
         context.setCaller(FUNCTION_2_ADDR);
         functionUnderTest.invoke(context, failResponse(context.getTransactionId()));
+
+        assertThat(context.getMessagesSent().size(), is(0));
+    }
+
+    @Test
+    public void ignoreFailureMessageWithWrongId() {
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+        functionUnderTest.invoke(context, standardAsyncOperationResult());
+        context.setCaller(FUNCTION_1_ADDR);
+        functionUnderTest.invoke(context, successResponse(context.getTransactionId()));
+        context.setCaller(FUNCTION_2_ADDR);
+        functionUnderTest.invoke(context, failResponse(""));
+
+        assertThat(context.getMessagesSent().size(), is(0));
+    }
+
+    @Test
+    public void ignoreSuccessMessageWithWrongId() {
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+        functionUnderTest.invoke(context, standardAsyncOperationResult());
+        context.setCaller(FUNCTION_1_ADDR);
+        functionUnderTest.invoke(context, successResponse(context.getTransactionId()));
+        context.setCaller(FUNCTION_2_ADDR);
+        functionUnderTest.invoke(context, successResponse(""));
 
         assertThat(context.getMessagesSent().size(), is(0));
     }
