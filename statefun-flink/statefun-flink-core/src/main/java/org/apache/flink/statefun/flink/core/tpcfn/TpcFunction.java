@@ -1,6 +1,8 @@
 package org.apache.flink.statefun.flink.core.tpcfn;
 
 import com.google.protobuf.Any;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.ImmutableTriple;
 import org.apache.flink.statefun.flink.core.backpressure.InternalContext;
 import org.apache.flink.statefun.flink.core.functions.StatefulFunctionInvocationException;
 import org.apache.flink.statefun.flink.core.generated.Payload;
@@ -95,18 +97,33 @@ public class TpcFunction implements StatefulFunction {
     private void onRequest(InternalContext context, Any message) {
         ToFunction.Invocation.Builder invocationBuilder = singleInvocationBuilder(context, message);
         if (!transactionInProgress.getOrDefault(false)) {
-            startTransaction(context, invocationBuilder);
+            startTransaction(context, invocationBuilder, context.getTransactionId(), context.getAddresses());
         } else {
-            List<ToFunction.Invocation.Builder> b =
+            List<ImmutableTriple<ToFunction.Invocation.Builder, String, List<org.apache.flink.statefun.sdk.Address>>> b =
                     batch.getOrDefault(new ArrayList());
-            b.add(invocationBuilder);
+
+            b.add(new ImmutableTriple(invocationBuilder, context.getTransactionId(), context.getAddresses()));
             LOGGER.info("Add transaction request to queue.");
             batch.set(b);
         }
     }
 
-    private void startTransaction(InternalContext context, ToFunction.Invocation.Builder invocationBuilder) {
+    private void startTransaction(InternalContext context, ToFunction.Invocation.Builder invocationBuilder,
+                                  String id,
+                                  List<org.apache.flink.statefun.sdk.Address> addresses) {
         transactionInProgress.set(true);
+        if (addresses != null) {
+            for (org.apache.flink.statefun.sdk.Address address : addresses) {
+                // Set all READ address values to TRUE, if they require another message they will be set to FALSE again
+                // on async result
+                currentTransactionFunctions.set(sdkAddressToPolyglotAddress(address), Boolean.TRUE);
+            }
+        }
+
+        if (id != null) {
+            currentTransactionId.set(id);
+        }
+
         sendToFunction(context, invocationBuilder);
         return;
     }
@@ -143,7 +160,7 @@ public class TpcFunction implements StatefulFunction {
 
     private void onAsyncResult(
             InternalContext context, AsyncOperationResult<ToFunction, FromFunction> asyncResult) {
-
+        LOGGER.info("Got async result for TPC!");
         if (asyncResult.unknown()) {
             ToFunction batch = asyncResult.metadata();
             sendToFunction(context, batch);
@@ -154,7 +171,9 @@ public class TpcFunction implements StatefulFunction {
                 unpackInvocationOrThrow(context.self(), asyncResult);
         List<FromFunction.Invocation> atomicInvocations = invocationResult.getAtomicInvocationsList();
 
-        currentTransactionId.set(UUID.randomUUID().toString());
+        if (currentTransactionId.get() == null) {
+            currentTransactionId.set(UUID.randomUUID().toString());
+        }
 
         for(FromFunction.Invocation invocation : atomicInvocations) {
             currentTransactionFunctions.set(invocation.getTarget(), Boolean.FALSE);
@@ -216,16 +235,17 @@ public class TpcFunction implements StatefulFunction {
     }
 
     private void continueProcessingQueuedTransactions(InternalContext context) {
-        List<ToFunction.Invocation.Builder> b = batch.getOrDefault(new ArrayList());
+        List<ImmutableTriple<ToFunction.Invocation.Builder, String, List<org.apache.flink.statefun.sdk.Address>>> b =
+                batch.getOrDefault(new ArrayList());
 
         if (b.size() == 0) {
             return;
         }
 
-        ToFunction.Invocation.Builder elem = b.remove(0);
+        ImmutableTriple<ToFunction.Invocation.Builder, String, List<org.apache.flink.statefun.sdk.Address>> elem = b.remove(0);
         batch.set(b);
         LOGGER.info("Executing next transaction from queue!");
-        startTransaction(context, elem);
+        startTransaction(context, elem.getLeft(), elem.getMiddle(), elem.getRight());
     }
 
     private void handleEgressMessages(Context context, List<FromFunction.EgressMessage> egressMessages) {

@@ -18,6 +18,8 @@
 package org.apache.flink.statefun.flink.core.message;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.OptionalLong;
 import javax.annotation.Nullable;
@@ -79,6 +81,15 @@ final class ProtobufMessage implements Message {
   }
 
   @Override
+  public List<Address> getAddresses() {
+    List<Address> result = new ArrayList<>();
+    for (EnvelopeAddress address : envelope.getTransactionReadFunctionsList()) {
+      result.add(protobufAddressToSdkAddress(address));
+    }
+    return result;
+  }
+
+  @Override
   public Context.TransactionMessage getTransactionMessage() {
     switch (envelope.getTransactionMessage()) {
       case NONE:
@@ -91,6 +102,8 @@ final class ProtobufMessage implements Message {
         return Context.TransactionMessage.COMMIT;
       case SAGAS:
         return Context.TransactionMessage.SAGAS;
+      case READ:
+        return Context.TransactionMessage.READ;
     }
     return null;
   }

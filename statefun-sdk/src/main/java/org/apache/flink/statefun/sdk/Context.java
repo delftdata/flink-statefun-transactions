@@ -18,6 +18,7 @@
 package org.apache.flink.statefun.sdk;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import org.apache.flink.statefun.sdk.io.EgressIdentifier;
 
@@ -50,12 +51,14 @@ public interface Context {
   TransactionMessage getTransactionMessage();
   boolean isTransaction();
   String getTransactionId();
+  List<Address> getAddresses();
 
   enum TransactionMessage {
     PREPARE,
     ABORT,
     COMMIT,
-    SAGAS
+    SAGAS,
+    READ
   }
 
   /**
@@ -69,6 +72,18 @@ public interface Context {
    */
   void sendTransactionMessage(Address to, Object message, String transactionId,
                               Context.TransactionMessage transactionMessage);
+
+  /**
+   * Invokes another function as a chained call towards a TPC function locking the functions this passes.
+   * This would represent "READ" calls in relational database systems.
+   *
+   * @param to
+   * @param message
+   * @param transactionId
+   * @param addresses
+   */
+  void sendTransactionReadMessage(Address to, Object message, String transactionId,
+                                  List<Address> addresses);
 
   /**
    * Invokes another function with an input, identified by the target function's {@link Address}.

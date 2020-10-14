@@ -18,6 +18,7 @@
 package org.apache.flink.statefun.flink.core.message;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Objects;
 import java.util.OptionalLong;
 import javax.annotation.Nullable;
@@ -38,6 +39,7 @@ final class SdkMessage implements Message {
 
   private String transactionId;
   private Context.TransactionMessage transactionMessage;
+  private List<Address> addresses;
 
   @Nullable private Envelope cachedEnvelope;
 
@@ -47,6 +49,7 @@ final class SdkMessage implements Message {
     this.payload = Objects.requireNonNull(payload);
     this.transactionId = null;
     this.transactionMessage = null;
+    this.addresses = null;
   }
 
   SdkMessage(@Nullable Address source, Address target, Object payload,
@@ -56,6 +59,17 @@ final class SdkMessage implements Message {
     this.payload = Objects.requireNonNull(payload);
     this.transactionId = transactionId;
     this.transactionMessage = transactionMessage;
+    this.addresses = null;
+  }
+
+  SdkMessage(@Nullable Address source, Address target, Object payload, String transactionId,
+             Context.TransactionMessage transactionMessage, List<Address> addresses) {
+    this.source = source;
+    this.target = Objects.requireNonNull(target);
+    this.payload = Objects.requireNonNull(payload);
+    this.transactionId = transactionId;
+    this.transactionMessage = transactionMessage;
+    this.addresses = addresses;
   }
 
   @Override
@@ -91,7 +105,11 @@ final class SdkMessage implements Message {
     return transactionId;
   }
 
+  @Override
   public Context.TransactionMessage getTransactionMessage() { return transactionMessage; }
+
+  @Override
+  public List<Address> getAddresses() { return addresses; }
 
   @Override
   public OptionalLong isBarrierMessage() {
@@ -122,6 +140,11 @@ final class SdkMessage implements Message {
                 contextTransactionMessageToEnvelopeTransactionMessage(transactionMessage));
         builder.setTransactionId(transactionId);
       }
+      if (addresses != null) {
+        for (Address address : addresses) {
+          builder.addTransactionReadFunctions(sdkAddressToProtobufAddress(address));
+        }
+      }
       cachedEnvelope = builder.build();
     }
     return cachedEnvelope;
@@ -136,6 +159,8 @@ final class SdkMessage implements Message {
         return Envelope.TransactionMessage.ABORT;
       case COMMIT:
         return Envelope.TransactionMessage.COMMIT;
+      case READ:
+        return Envelope.TransactionMessage.READ;
       default:
         return Envelope.TransactionMessage.NONE;
     }

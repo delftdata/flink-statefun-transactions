@@ -27,10 +27,13 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.ImmutableTriple;
 import org.apache.flink.statefun.flink.core.backpressure.InternalContext;
+import org.apache.flink.statefun.flink.core.generated.Payload;
 import org.apache.flink.statefun.flink.core.metrics.RemoteInvocationMetrics;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.EgressMessage;
@@ -71,7 +74,10 @@ public final class RequestReplyFunction implements StatefulFunction {
           PersistedValue.of("tpc-in-flight", Boolean.class);
   @Persisted
   private final PersistedValue<Boolean> sagasInFlight =
-          PersistedValue.of("sagas-in-flinght", Boolean.class);
+          PersistedValue.of("sagas-in-flight", Boolean.class);
+  @Persisted
+  private final PersistedValue<Boolean> transactionReadInFlight =
+          PersistedValue.of("transaction-read-in-flight", Boolean.class);
   @Persisted
   private final PersistedValue<List> batch =
       PersistedValue.of("batch", List.class);
@@ -89,6 +95,9 @@ public final class RequestReplyFunction implements StatefulFunction {
   @Persisted
   private final PersistedValue<FromFunction.InvocationResponse> transactionResult =
           PersistedValue.of("transaction-result", FromFunction.InvocationResponse.class);
+  @Persisted
+  private final PersistedValue<List> previousAddresses =
+          PersistedValue.of("previous-addresses", List.class);
 
   public RequestReplyFunction(
       PersistedRemoteFunctionValues managedStates,
@@ -142,11 +151,22 @@ public final class RequestReplyFunction implements StatefulFunction {
             && locked.getOrDefault(false)) {
       if (context.getTransactionMessage().equals(Context.TransactionMessage.ABORT)) {
         LOGGER.info("Received transaction abort invocation for remote function: " + context.self().type().toString());
-        cleanUpAfterTransaction(context);
+        cleanUpAfterTransaction();
+        if (!tpcInFlight.getOrDefault(false)) {
+          continueProcessingBatchedRequests(context);
+        }
       } else if (context.getTransactionMessage().equals(Context.TransactionMessage.COMMIT)) {
         LOGGER.info("Received transaction commit invocation for remote function: " + context.self().type().toString());
-        handleInvocationResponse(context, transactionResult.get());
-        cleanUpAfterTransaction(context);
+        InvocationResponse response = transactionResult.get();
+        cleanUpAfterTransaction();
+        if (response != null) {
+          handleInvocationResponse(context, response);
+        }
+        continueProcessingBatchedRequests(context);
+      } else if (context.getTransactionMessage().equals(Context.TransactionMessage.PREPARE)) {
+        LOGGER.info("Received transaction prepare invocation for (READ_LOCKED) remote function: " + context.self().type().toString());
+        // Continuing from read locked transaction
+        startTpcTransaction(context, invocationBuilder, context.getTransactionId());
       } else {
         LOGGER.info("Received unexpected message for current transaction ID for remote function: " + context.self().type().toString());
       }
@@ -181,15 +201,24 @@ public final class RequestReplyFunction implements StatefulFunction {
       return;
     }
 
+    // Handle new READ chain function invocation
+    if (context.getTransactionMessage().equals(Context.TransactionMessage.READ)) {
+      if (requestState.getOrDefault(-1) < 0 && !locked.getOrDefault(false)) {
+        startReadTransaction(context, invocationBuilder, context.getTransactionId(), context.getAddresses());
+      } else {
+        addToBatch(context, invocationBuilder);
+      }
+    }
+
     LOGGER.info("Received UNEXPECTED transaction invocation for remote function: " + context.self().type().toString());
   }
 
   private void removeTpcInvocationFromQueueIfQueued(InternalContext context) {
-    List<ImmutablePair<ImmutablePair<Context.TransactionMessage, String>,ToFunction.Invocation>> batchList =
+    List<ImmutablePair<ImmutableTriple<Context.TransactionMessage, String, List<Address>>,ToFunction.Invocation>> batchList =
             batch.getOrDefault(new ArrayList());
     for (int i = 0; i < batchList.size(); i++) {
-      ImmutablePair<ImmutablePair<Context.TransactionMessage, String>,ToFunction.Invocation> current = batchList.get(i);
-      if (current.getKey().getValue() != null && current.getKey().getValue().equals(context.getTransactionId())) {
+      ImmutablePair<ImmutableTriple<Context.TransactionMessage, String, List<Address>>,ToFunction.Invocation> current = batchList.get(i);
+      if (current.getKey().getMiddle() != null && current.getKey().getMiddle().equals(context.getTransactionId())) {
         batchList.remove(i);
         batch.set(batchList);
         context.functionTypeMetrics().consumeBacklogMessages(1);
@@ -204,7 +233,10 @@ public final class RequestReplyFunction implements StatefulFunction {
     int inflightOrBatched = requestState.getOrDefault(-1);
     List batchList = batch.getOrDefault(new ArrayList());
     batchList.add(new ImmutablePair<>(
-            new ImmutablePair<>(context.getTransactionMessage(), context.getTransactionId()),
+            new ImmutableTriple<>(
+                    context.getTransactionMessage(),
+                    context.getTransactionId(),
+                    context.getAddresses()),
             invocationBuilder.build()));
     batch.set(batchList);
     inflightOrBatched++;
@@ -235,14 +267,20 @@ public final class RequestReplyFunction implements StatefulFunction {
     sendToFunction(context, invocationBuilder);
   }
 
-  private void cleanUpAfterTransaction(InternalContext context) {
+  private void startReadTransaction(InternalContext context, Invocation.Builder invocationBuilder, String id,
+                                    List<Address> addresses) {
+    requestState.set(0);
+    transactionReadInFlight.set(true);
+    transactionId.set(id);
+    previousAddresses.set(addresses);
+    sendToFunction(context, invocationBuilder);
+  }
+
+  private void cleanUpAfterTransaction() {
     locked.clear();
     transactionId.clear();
     transactionResponseAddress.clear();
     transactionResult.clear();
-    if (!tpcInFlight.getOrDefault(false)) {
-      continueProcessingBatchedRequests(context);
-    }
   }
 
   private void onAsyncResult(
@@ -255,38 +293,65 @@ public final class RequestReplyFunction implements StatefulFunction {
 
     InvocationResponse invocationResult = unpackInvocationOrThrow(context.self(), asyncResult);
 
+    // Handle response of outgoing TPC invocation
     if (tpcInFlight.getOrDefault(false)) {
       tpcInFlight.clear();
       if (locked.getOrDefault(false)) {
-        LOGGER.info("Received async result invocation for LOCKED (CURRENT) TRANSACTION: " + context.self().type().toString());
+        LOGGER.info("Received async result invocation for LOCKED (CURRENT) TRANSACTION: " +
+                context.self().type().toString());
         transactionResult.set(invocationResult);
         replyToTransactionFunction(context, invocationResult);
       } else {
-        LOGGER.info("Received async result invocation for UNLOCKED (/OLD) TRANSACTION: " + context.self().type().toString());
+        LOGGER.info("Received async result invocation for UNLOCKED (/OLD) TRANSACTION: " +
+                context.self().type().toString());
         continueProcessingBatchedRequests(context);
       }
       return;
     }
 
+    // Handle response of outgoing SAGAS invocation
     if (sagasInFlight.getOrDefault(false)) {
       sagasInFlight.clear();
-      LOGGER.info("Received SAGAS result for function: " + context.self().type().toString());
+      LOGGER.info("Received async SAGAS result for function: " + context.self().type().toString());
       replyToTransactionFunction(context, invocationResult);
+      cleanUpAfterTransaction();
       // If successful
       if (!invocationResult.getFailed()) {
         handleInvocationResponse(context, invocationResult);
       }
-      cleanUpAfterTransaction(context);
+      continueProcessingBatchedRequests(context);
       return;
     }
 
-    if (locked.getOrDefault(false)) {
-      LOGGER.info("Received UNEXPECTED regular async result invocation: " + context.self().type().toString());
-    } else {
-      LOGGER.info("Received regular async result invocation: " + context.self().type().toString());
+    // Handle response of call of read for transaction
+    if (transactionReadInFlight.getOrDefault(false)) {
+      transactionReadInFlight.clear();
+      // In case it ends up not going to a transaction unlock the previous functions
+      if (!invocationResult.hasOutgoingMessageToTransaction() && previousAddresses.get() != null) {
+        for(Object object : previousAddresses.get()) {
+          Address address = (Address) object;
+          final org.apache.flink.statefun.sdk.Address to = address;
+          final Any message = Any.pack(Payload.getDefaultInstance());
+          context.sendTransactionMessage(to, message, transactionId.get(),
+                  Context.TransactionMessage.COMMIT);
+        }
+      }
       handleInvocationResponse(context, invocationResult);
       continueProcessingBatchedRequests(context);
+      previousAddresses.clear();
+      return;
     }
+
+    // Handle unexpected response when function is locked
+    if (locked.getOrDefault(false)) {
+      LOGGER.info("Received UNEXPECTED regular async result invocation: " + context.self().type().toString());
+      return;
+    }
+
+    // Handle regular async response
+    LOGGER.info("Received regular async result invocation: " + context.self().type().toString());
+    handleInvocationResponse(context, invocationResult);
+    continueProcessingBatchedRequests(context);
   }
 
   private void replyToTransactionFunction(InternalContext context, InvocationResponse invocationResult) {
@@ -299,10 +364,14 @@ public final class RequestReplyFunction implements StatefulFunction {
   }
 
   private void continueProcessingBatchedRequests(InternalContext context) {
-    List<ImmutablePair<ImmutablePair<Context.TransactionMessage, String>,ToFunction.Invocation>> batchList =
+    List<ImmutablePair<ImmutableTriple<Context.TransactionMessage, String, List<Address>>,ToFunction.Invocation>> batchList =
             batch.getOrDefault(new ArrayList());
     if (batchList.size() == 0) {
       requestState.clear();
+      return;
+    }
+    if (locked.getOrDefault(false) || tpcInFlight.getOrDefault(false)
+            || sagasInFlight.getOrDefault(false)) {
       return;
     }
 
@@ -310,13 +379,17 @@ public final class RequestReplyFunction implements StatefulFunction {
     InvocationBatchRequest.Builder builder = InvocationBatchRequest.newBuilder();
     int size = batchList.size();
     for (int i = 0; i < size; i++) {
-      ImmutablePair<ImmutablePair<Context.TransactionMessage, String>,ToFunction.Invocation> current = batchList.get(0);
-      if (current.getKey().getValue() != null) {
+      ImmutablePair<ImmutableTriple<Context.TransactionMessage, String, List<Address>>,ToFunction.Invocation> current =
+              batchList.get(0);
+      if (current.getKey().getMiddle() != null) {
         if (i == 0) {
-          if (current.getKey().getKey().equals(Context.TransactionMessage.SAGAS)) {
-            startSagasTransaction(context, current.getValue().toBuilder(), current.getKey().getValue());
-          } else if (current.getKey().getKey().equals(Context.TransactionMessage.PREPARE)) {
-            startTpcTransaction(context, current.getValue().toBuilder(), current.getKey().getValue());
+          if (current.getKey().getLeft().equals(Context.TransactionMessage.SAGAS)) {
+            startSagasTransaction(context, current.getValue().toBuilder(), current.getKey().getMiddle());
+          } else if (current.getKey().getLeft().equals(Context.TransactionMessage.PREPARE)) {
+            startTpcTransaction(context, current.getValue().toBuilder(), current.getKey().getMiddle());
+          } else if (current.getKey().getLeft().equals(Context.TransactionMessage.READ)) {
+            startReadTransaction(context, current.getValue().toBuilder(), current.getKey().getMiddle(),
+                    current.getKey().getRight());
           }
           batchList.remove(0);
         } else {
@@ -360,6 +433,50 @@ public final class RequestReplyFunction implements StatefulFunction {
     handleOutgoingDelayedMessages(context, invocationResult);
     handleEgressMessages(context, invocationResult);
     handleStateMutations(invocationResult);
+    if (invocationResult.hasOutgoingMessageToTransaction()) {
+      handleOutgoingMessageToTransaction(context, invocationResult);
+    }
+  }
+
+  private void handleOutgoingMessageToTransaction(Context context, InvocationResponse invocationResult) {
+    FromFunction.Invocation toTransaction = invocationResult.getOutgoingMessageToTransaction();
+    final Address to = polyglotAddressToSdkAddress(toTransaction.getTarget());
+    final Any message = toTransaction.getArgument();
+    String id;
+    if (context.getTransactionId() == null) {
+      id = UUID.randomUUID().toString();
+    } else {
+      id = context.getTransactionId();
+    }
+    locked.set(true);
+    transactionId.set(id);
+    List<Address> addresses;
+    if (previousAddresses.get() != null) {
+      addresses = previousAddresses.get();
+    } else {
+      addresses = new ArrayList<>();
+    }
+    context.sendTransactionReadMessage(to, message, id, addresses);
+
+    // Handling unhandled invocations
+    if (invocationResult.getUnhandledInvocationsCount() > 0) {
+      List<ImmutablePair<ImmutableTriple<Context.TransactionMessage, String, List<Address>>,ToFunction.Invocation>>
+              nextBatch = new ArrayList<>();
+      for (FromFunction.Invocation invocation : invocationResult.getUnhandledInvocationsList()) {
+        nextBatch.add(
+                new ImmutablePair<>(
+                        new ImmutableTriple<>(
+                                null,
+                                null,
+                                null),
+                        Invocation.newBuilder()
+                                .setArgument(invocation.getArgument())
+                                .setCaller(invocation.getTarget())
+                                .build()));
+      }
+      nextBatch.addAll(batch.get());
+      batch.set(nextBatch);
+    }
   }
 
   private void handleEgressMessages(Context context, InvocationResponse invocationResult) {

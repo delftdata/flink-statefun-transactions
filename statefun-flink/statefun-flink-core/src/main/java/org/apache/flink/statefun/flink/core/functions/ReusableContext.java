@@ -18,6 +18,7 @@
 package org.apache.flink.statefun.flink.core.functions;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import org.apache.flink.statefun.flink.core.backpressure.InternalContext;
@@ -43,6 +44,7 @@ final class ReusableContext implements ApplyingContext, InternalContext {
 
   private String transactionId;
   private TransactionMessage transactionMessage;
+  private List<Address> addresses;
 
   private Message in;
   private LiveFunction function;
@@ -68,6 +70,7 @@ final class ReusableContext implements ApplyingContext, InternalContext {
     this.asyncSink = Objects.requireNonNull(asyncSink);
     this.transactionId = null;
     this.transactionMessage = null;
+    this.addresses = null;
   }
 
   @Override
@@ -76,6 +79,8 @@ final class ReusableContext implements ApplyingContext, InternalContext {
     this.function = function;
     this.transactionId = inMessage.getTransactionId();
     this.transactionMessage = inMessage.getTransactionMessage();
+    this.addresses = inMessage.getAddresses();
+
     state.setCurrentKey(inMessage.target());
     function.metrics().incomingMessage();
     function.receive(this, in);
@@ -89,6 +94,21 @@ final class ReusableContext implements ApplyingContext, InternalContext {
     Objects.requireNonNull(to);
     Objects.requireNonNull(what);
     Message envelope = messageFactory.from(self(), to, what, transactionId, transactionMessage);
+    if (thisPartition.contains(to)) {
+      localSink.accept(envelope);
+      function.metrics().outgoingLocalMessage();
+    } else {
+      remoteSink.accept(envelope);
+      function.metrics().outgoingRemoteMessage();
+    }
+  }
+
+  @Override
+  public void sendTransactionReadMessage(Address to, Object what, String transactionId,
+                                         List<Address> addresses) {
+    Objects.requireNonNull(to);
+    Objects.requireNonNull(what);
+    Message envelope = messageFactory.from(self(), to, what, transactionId, TransactionMessage.READ, addresses);
     if (thisPartition.contains(to)) {
       localSink.accept(envelope);
       function.metrics().outgoingLocalMessage();
@@ -154,6 +174,9 @@ final class ReusableContext implements ApplyingContext, InternalContext {
   public Address caller() {
     return in.source();
   }
+
+  @Override
+  public List<Address> getAddresses() { return addresses; }
 
   @Override
   public TransactionMessage getTransactionMessage() {

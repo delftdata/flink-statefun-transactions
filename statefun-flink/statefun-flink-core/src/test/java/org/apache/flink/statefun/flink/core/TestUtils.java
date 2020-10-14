@@ -159,6 +159,11 @@ public class TestUtils {
       return transactionId;
     }
 
+    @Override
+    public List<Address> getAddresses() {
+      return null;
+    }
+
     public void setCaller(Address address) { caller = address; }
 
     public Address getCaller() {
@@ -195,6 +200,11 @@ public class TestUtils {
     public void sendTransactionMessage(Address to, Object message, String id, TransactionMessage transactionMessage) {
       tpcMessagesSent.add(new AbstractMap.SimpleImmutableEntry<>(to, message));
       transactionId = id;
+    }
+
+    @Override
+    public void sendTransactionReadMessage(Address to, Object message, String transactionId, List<Address> addresses) {
+
     }
 
     @Override

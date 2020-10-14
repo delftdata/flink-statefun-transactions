@@ -17,6 +17,7 @@
  */
 package org.apache.flink.statefun.flink.core.functions;
 
+import java.util.List;
 import java.util.OptionalLong;
 import javax.annotation.Nullable;
 import org.apache.flink.core.memory.DataOutputView;
@@ -117,6 +118,9 @@ final class AsyncMessageDecorator<T> implements Message {
   public String getTransactionId() {
     return message.getTransactionId();
   }
+
+  @Override
+  public List<Address> getAddresses() { return message.getAddresses(); }
 
   @Override
   public void writeTo(MessageFactory context, DataOutputView target) {

@@ -92,8 +92,18 @@ class TestContext implements Context {
   }
 
   @Override
+  public List<Address> getAddresses() {
+    return null;
+  }
+
+  @Override
   public void sendTransactionMessage(Address to, Object message, String transactionId, TransactionMessage transactionMessage) {
     return;
+  }
+
+  @Override
+  public void sendTransactionReadMessage(Address to, Object message, String transactionId, List<Address> addresses) {
+
   }
 
   @Override
