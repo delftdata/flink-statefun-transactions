@@ -62,7 +62,7 @@ def order_request_handler(context, request: OrderRequest):
         # send checkout message
         response.status_code = 200
         response.state.CopyFrom(state)
-        context.pack_and_send("python-example/checkout", response.order_id, response)
+        context.pack_and_send_transaction_invocation("python-example/checkout", response.order_id, response)
         response = None
     elif state.paid:
         response.status_code = 500
@@ -106,7 +106,7 @@ def order_request_handler(context, request: OrderRequest):
         # send checkout message
         response.status_code = 200
         response.state.CopyFrom(state)
-        context.pack_and_send("python-example/checkout", response.order_id, response)
+        context.pack_and_send_transaction_invocation("python-example/checkout", response.order_id, response)
         response = None
     else:
         response.status_code = 500
