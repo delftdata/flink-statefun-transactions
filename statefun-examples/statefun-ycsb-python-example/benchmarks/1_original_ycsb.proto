@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+// Workload parameters:
+// 
+// Distribution of operations (percentages)
+// Distribution of operations on keys (uniform, zipfian, etc)
+
+message FunctionState {
+    map<string,string> fields = 1;
+}
+
+message Insert {
+    string id = 1;
+    FunctionState state = 2;
+}
+
+message Read {
+    string id = 1;
+}
+
+message Update {
+    string id = 1;
+    map<string, string> updates = 2;
+}
+
+// not used in "core workloads"
+message Delete {
+    string id = 1;
+}
+
+// not used in "core workloads"
+// only simulates a read and update operation on the same id
+// no transactional guarantees 
+// no logic based on read
+message ReadModifyWrite {
+    string id = 1;
+    map<string, string> updates = 2;
+}

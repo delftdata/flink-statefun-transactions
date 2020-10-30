@@ -1,0 +1,41 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: delete-function
+spec:
+  selector:
+    matchLabels:
+      service: delete-function
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        service: delete-function
+    spec:
+      containers:
+        - name: delete-function
+          image: # TODO
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "0.25Gi"
+              cpu: "100m"
+            limits:
+              memory: "0.25Gi"
+              cpu: "100m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: delete-function
+spec:
+  type: ClusterIP
+  selector:
+    service: delete-function
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
