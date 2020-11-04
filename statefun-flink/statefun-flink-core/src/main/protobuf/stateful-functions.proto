@@ -55,7 +55,8 @@ message Envelope {
         COMMIT = 3;
         SAGAS = 4;
         READ = 5;
+        BLOCKING = 6;
     }
     TransactionMessage transaction_message = 6;
-    repeated EnvelopeAddress transaction_read_functions = 7;
+    repeated EnvelopeAddress transaction_functions = 7;
 }
