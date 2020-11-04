@@ -5,4 +5,4 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: martijn-thesis-statefun-python-sdk-base-image:latest
+    image: thesis-statefun-python-sdk-base-image:latest

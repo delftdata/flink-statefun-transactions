@@ -1,4 +1,4 @@
-FROM martijn-thesis-statefun-python-sdk-base-image:latest
+FROM thesis-statefun-python-sdk-base-image:latest
 
 RUN mkdir -p /app
 WORKDIR /app

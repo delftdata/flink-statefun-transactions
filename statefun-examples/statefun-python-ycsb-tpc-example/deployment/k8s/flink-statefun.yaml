@@ -40,7 +40,7 @@ data:
     restart-strategy.fixed-delay.delay: 1sec
     jobmanager.memory.process.size: 1g
     taskmanager.memory.process.size: 1g
-    parallelism.default: 3
+    parallelism.default: 2
 
   log4j-console.properties: |+
     rootLogger.level = INFO
@@ -170,8 +170,7 @@ spec:
     spec:
       containers:
         - name: master
-          image: # TODO 
-          imagePullPolicy: Never
+          image: martijndeh/extended-statefun-ycsb-tpc-master
           env:
             - name: ROLE
               value: master
@@ -183,8 +182,8 @@ spec:
               memory: "0.25Gi"
               cpu: 100m
             limits: 
-              memory: "0.25Gi"
-              cpu: 100m
+              memory: "1.75Gi"
+              #cpu: 500m
           ports:
             - containerPort: 6123
               name: rpc
@@ -231,7 +230,7 @@ kind: Deployment
 metadata:
   name: statefun-worker
 spec:
-  replicas: 5
+  replicas: 2
   selector:
     matchLabels:
       app: statefun
@@ -244,8 +243,7 @@ spec:
     spec:
       containers:
         - name: worker
-          image: # TODO
-          imagePullPolicy: Never
+          image: martijndeh/extended-statefun-ycsb-tpc-worker
           env:
             - name: ROLE
               value: worker
@@ -256,8 +254,8 @@ spec:
               memory: "0.25Gi"
               cpu: 100m
             limits: 
-              memory: "0.25Gi"
-              cpu: 100m
+              memory: "2Gi"
+              #cpu: 200m
           ports:
             - containerPort: 6122
               name: rpc

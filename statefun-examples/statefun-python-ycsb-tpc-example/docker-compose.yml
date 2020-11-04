@@ -23,6 +23,7 @@ services:
         build:
             dockerfile: docker/Dockerfile.statefun
             context: .
+        image: martijndeh/extended-statefun-ycsb-tpc-master
         expose:
             - "6123"
         ports:
@@ -36,6 +37,7 @@ services:
         build:
             dockerfile: docker/Dockerfile.statefun
             context: .
+        image: martijndeh/extended-statefun-ycsb-tpc-worker
         expose:
             - "6121"
             - "6122"
@@ -56,18 +58,21 @@ services:
         build:
             context: .
             dockerfile: docker/Dockerfile.account
+        image: martijndeh/extended-statefun-ycsb-tpc-account
         expose:
             - 80
     transfer-function:
         build:
             context: .
             dockerfile: docker/Dockerfile.transfer
+        image: martijndeh/extended-statefun-ycsb-tpc-transfer
         expose:
             - 80
     delete-function:
         build:
             context: .
             dockerfile: docker/Dockerfile.delete
+        image: martijndeh/extended-statefun-ycsb-tpc-delete-transfer
         expose:
             - 80
 
@@ -81,3 +86,4 @@ services:
         build:
             dockerfile: docker/Dockerfile.gateway
             context: .
+        image: martijndeh/extended-statefun-ycsb-tpc-http-gateway

@@ -15,8 +15,7 @@ spec:
     spec:
       containers:
         - name: delete-function
-          image: # TODO
-          imagePullPolicy: Never
+          image: martijndeh/extended-statefun-ycsb-tpc-delete-transfer
           ports:
             - containerPort: 80
           resources:

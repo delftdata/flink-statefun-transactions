@@ -15,8 +15,7 @@ spec:
     spec:
       containers:
         - name: transfer-function
-          image: # TODO
-          imagePullPolicy: Never
+          image: martijndeh/extended-statefun-ycsb-tpc-transfer
           ports:
             - containerPort: 80
           resources:

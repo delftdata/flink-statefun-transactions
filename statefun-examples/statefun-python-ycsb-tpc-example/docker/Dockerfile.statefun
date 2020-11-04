@@ -1,4 +1,4 @@
-FROM martijn-thesis-flink-statefun:latest
+FROM thesis-flink-statefun:latest
 
 RUN mkdir -p /opt/statefun/modules/test
 

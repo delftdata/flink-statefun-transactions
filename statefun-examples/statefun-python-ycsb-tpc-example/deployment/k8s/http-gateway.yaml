@@ -8,7 +8,7 @@ spec:
     service: http-gateway
   ports:
     - protocol: TCP
-      port: 83
+      port: 80
       targetPort: 80
 ---
 apiVersion: apps/v1
@@ -27,17 +27,16 @@ spec:
     spec:
       containers:
         - name: http-gateway
-          image: # TODO
-          imagePullPolicy: Never
+          image: martijndeh/extended-statefun-ycsb-tpc-http-gateway
           ports:
             - containerPort: 80
           env:
             - name: KAFKA_BROKER
               value: 'kafka-cluster-kafka-bootstrap:9092'
-          resources:
-            requests:
-              memory: "500Mi"
-              cpu: "500m"
-            limits:
-              memory: "500Mi"
-              cpu: "500m"
+          # resources:
+            # requests:
+            #   memory: "500Mi"
+            #   cpu: "500m"
+            # limits:
+            #   memory: "500Mi"
+            #   cpu: "500m"
