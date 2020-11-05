@@ -18,9 +18,12 @@
 package org.apache.flink.statefun.flink.core.functions;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+
+import com.google.protobuf.Empty;
 import org.apache.flink.statefun.flink.core.backpressure.InternalContext;
 import org.apache.flink.statefun.flink.core.di.Inject;
 import org.apache.flink.statefun.flink.core.di.Label;
@@ -29,7 +32,6 @@ import org.apache.flink.statefun.flink.core.message.MessageFactory;
 import org.apache.flink.statefun.flink.core.metrics.FunctionTypeMetrics;
 import org.apache.flink.statefun.flink.core.state.State;
 import org.apache.flink.statefun.sdk.Address;
-import org.apache.flink.statefun.sdk.annotations.Persisted;
 import org.apache.flink.statefun.sdk.io.EgressIdentifier;
 
 final class ReusableContext implements ApplyingContext, InternalContext {
@@ -94,13 +96,7 @@ final class ReusableContext implements ApplyingContext, InternalContext {
     Objects.requireNonNull(to);
     Objects.requireNonNull(what);
     Message envelope = messageFactory.from(self(), to, what, transactionId, transactionMessage);
-    if (thisPartition.contains(to)) {
-      localSink.accept(envelope);
-      function.metrics().outgoingLocalMessage();
-    } else {
-      remoteSink.accept(envelope);
-      function.metrics().outgoingRemoteMessage();
-    }
+    sendEnvelope(to, envelope);
   }
 
   @Override
@@ -109,13 +105,25 @@ final class ReusableContext implements ApplyingContext, InternalContext {
     Objects.requireNonNull(to);
     Objects.requireNonNull(what);
     Message envelope = messageFactory.from(self(), to, what, transactionId, TransactionMessage.READ, addresses);
-    if (thisPartition.contains(to)) {
-      localSink.accept(envelope);
-      function.metrics().outgoingLocalMessage();
-    } else {
-      remoteSink.accept(envelope);
-      function.metrics().outgoingRemoteMessage();
-    }
+    sendEnvelope(to, envelope);
+  }
+
+  @Override
+  public void sendDeadlockDetectionProbe(Address to, Address initiator) {
+    Objects.requireNonNull(to);
+    List<Address> addresses = new ArrayList<>();
+    addresses.add(initiator);
+    Message envelope = messageFactory.from(self(), to, Empty.getDefaultInstance(),
+            "N/A", TransactionMessage.BLOCKING, addresses);
+    sendEnvelope(to, envelope);
+  }
+
+  @Override
+  public void sendBlockingFunctions(Address to, String transactionId, List<Address> addresses) {
+    Objects.requireNonNull(to);
+    Message envelope = messageFactory.from(self(), to, Empty.getDefaultInstance(),
+            transactionId, TransactionMessage.BLOCKING, addresses);
+    sendEnvelope(to, envelope);
   }
 
   @Override
@@ -123,13 +131,7 @@ final class ReusableContext implements ApplyingContext, InternalContext {
     Objects.requireNonNull(to);
     Objects.requireNonNull(what);
     Message envelope = messageFactory.from(self(), to, what);
-    if (thisPartition.contains(to)) {
-      localSink.accept(envelope);
-      function.metrics().outgoingLocalMessage();
-    } else {
-      remoteSink.accept(envelope);
-      function.metrics().outgoingRemoteMessage();
-    }
+    sendEnvelope(to, envelope);
   }
 
   @Override
@@ -200,5 +202,15 @@ final class ReusableContext implements ApplyingContext, InternalContext {
   @Override
   public Address self() {
     return in.target();
+  }
+
+  private void sendEnvelope(Address to, Message envelope) {
+    if (thisPartition.contains(to)) {
+      localSink.accept(envelope);
+      function.metrics().outgoingLocalMessage();
+    } else {
+      remoteSink.accept(envelope);
+      function.metrics().outgoingRemoteMessage();
+    }
   }
 }

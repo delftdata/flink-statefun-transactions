@@ -107,6 +107,16 @@ class TestContext implements Context {
   }
 
   @Override
+  public void sendDeadlockDetectionProbe(Address to, Address initiator) {
+
+  }
+
+  @Override
+  public void sendBlockingFunctions(Address to, String transactionId, List<Address> addresses) {
+
+  }
+
+  @Override
   public void reply(Object message) {
     Address to = caller();
     if (to == null) {

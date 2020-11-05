@@ -356,6 +356,16 @@ public class RequestReplyFunctionSagasTest {
         }
 
         @Override
+        public void sendDeadlockDetectionProbe(Address to, Address initiator) {
+
+        }
+
+        @Override
+        public void sendBlockingFunctions(Address to, String transactionId, List<Address> addresses) {
+
+        }
+
+        @Override
         public void send(Address to, Object message) {
             messagesSent.add(new SimpleImmutableEntry<>(to, message));
         }

@@ -230,8 +230,33 @@ public final class RequestReplyFunction implements StatefulFunction {
   }
 
   private void addToBatch(InternalContext context, Invocation.Builder invocationBuilder) {
+
     int inflightOrBatched = requestState.getOrDefault(-1);
-    List batchList = batch.getOrDefault(new ArrayList());
+    List<ImmutablePair> batchList = batch.getOrDefault(new ArrayList());
+
+    if (context.getTransactionMessage() != null &&
+            context.getTransactionMessage().equals(Context.TransactionMessage.PREPARE)) {
+      List<Address> blockingAddresses = new ArrayList<>();
+      if (locked.getOrDefault(false)) {
+        blockingAddresses.add(transactionResponseAddress.get());
+      }
+      for (ImmutablePair pair : batchList) {
+        ImmutableTriple triple = (ImmutableTriple) pair.left;
+        if (triple.left != null) {
+          Context.TransactionMessage message = (Context.TransactionMessage) triple.left;
+          if (message.equals(Context.TransactionMessage.PREPARE)){
+            ToFunction.Invocation blocking = (ToFunction.Invocation) pair.getRight();
+            blockingAddresses.add(polyglotAddressToSdkAddress(blocking.getCaller()));
+          }
+        }
+      }
+
+      context.sendBlockingFunctions(
+              polyglotAddressToSdkAddress(invocationBuilder.getCaller()),
+              context.getTransactionId(),
+              blockingAddresses);
+    }
+
     batchList.add(new ImmutablePair<>(
             new ImmutableTriple<>(
                     context.getTransactionMessage(),

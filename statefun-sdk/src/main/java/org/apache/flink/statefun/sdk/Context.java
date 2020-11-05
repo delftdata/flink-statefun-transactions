@@ -8,7 +8,7 @@
  * with the License.  You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+uu *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -58,7 +58,8 @@ public interface Context {
     ABORT,
     COMMIT,
     SAGAS,
-    READ
+    READ,
+    BLOCKING
   }
 
   /**
@@ -84,6 +85,23 @@ public interface Context {
    */
   void sendTransactionReadMessage(Address to, Object message, String transactionId,
                                   List<Address> addresses);
+
+  /**
+   * Sends a deadlock detection probe to another function including the initiator.
+   *
+   * @param to
+   * @param initiator
+   */
+  void sendDeadlockDetectionProbe(Address to, Address initiator);
+
+  /**
+   * Send the functions currently blocking from a request reply function to the Tpc function.
+   *
+   * @param to
+   * @param transactionId
+   * @param addresses
+   */
+  void sendBlockingFunctions(Address to, String transactionId, List<Address> addresses);
 
   /**
    * Invokes another function with an input, identified by the target function's {@link Address}.

@@ -154,6 +154,16 @@ public class LocalStatefulFunctionGroupTest {
     }
 
     @Override
+    public void sendDeadlockDetectionProbe(Address to, Address initiator) {
+
+    }
+
+    @Override
+    public void sendBlockingFunctions(Address to, String transactionId, List<Address> addresses) {
+
+    }
+
+    @Override
     public void send(Address to, Object message) {}
 
     @Override

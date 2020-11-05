@@ -83,7 +83,7 @@ final class ProtobufMessage implements Message {
   @Override
   public List<Address> getAddresses() {
     List<Address> result = new ArrayList<>();
-    for (EnvelopeAddress address : envelope.getTransactionReadFunctionsList()) {
+    for (EnvelopeAddress address : envelope.getTransactionFunctionsList()) {
       result.add(protobufAddressToSdkAddress(address));
     }
     return result;
@@ -104,6 +104,8 @@ final class ProtobufMessage implements Message {
         return Context.TransactionMessage.SAGAS;
       case READ:
         return Context.TransactionMessage.READ;
+      case BLOCKING:
+        return Context.TransactionMessage.BLOCKING;
     }
     return null;
   }

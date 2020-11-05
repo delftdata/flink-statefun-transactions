@@ -142,7 +142,7 @@ final class SdkMessage implements Message {
       }
       if (addresses != null) {
         for (Address address : addresses) {
-          builder.addTransactionReadFunctions(sdkAddressToProtobufAddress(address));
+          builder.addTransactionFunctions(sdkAddressToProtobufAddress(address));
         }
       }
       cachedEnvelope = builder.build();
@@ -161,6 +161,8 @@ final class SdkMessage implements Message {
         return Envelope.TransactionMessage.COMMIT;
       case READ:
         return Envelope.TransactionMessage.READ;
+      case BLOCKING:
+        return Envelope.TransactionMessage.BLOCKING;
       default:
         return Envelope.TransactionMessage.NONE;
     }

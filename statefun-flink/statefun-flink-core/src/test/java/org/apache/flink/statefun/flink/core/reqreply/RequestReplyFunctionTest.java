@@ -51,7 +51,6 @@ import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction.Invoca
 import org.apache.flink.statefun.sdk.Address;
 import org.apache.flink.statefun.sdk.AsyncOperationResult;
 import org.apache.flink.statefun.sdk.AsyncOperationResult.Status;
-import org.apache.flink.statefun.sdk.Context;
 import org.apache.flink.statefun.sdk.FunctionType;
 import org.apache.flink.statefun.sdk.io.EgressIdentifier;
 import org.junit.Test;
@@ -372,6 +371,16 @@ public class RequestReplyFunctionTest {
 
     @Override
     public void sendTransactionReadMessage(Address to, Object message, String transactionId, List<Address> addresses) {
+
+    }
+
+    @Override
+    public void sendDeadlockDetectionProbe(Address to, Address initiator) {
+
+    }
+
+    @Override
+    public void sendBlockingFunctions(Address to, String transactionId, List<Address> addresses) {
 
     }
 
