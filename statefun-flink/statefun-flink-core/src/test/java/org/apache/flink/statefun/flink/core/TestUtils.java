@@ -20,7 +20,6 @@ package org.apache.flink.statefun.flink.core;
 import com.google.protobuf.ByteString;
 import org.apache.flink.statefun.flink.core.backpressure.InternalContext;
 import org.apache.flink.statefun.flink.core.generated.EnvelopeAddress;
-import org.apache.flink.statefun.flink.core.message.Message;
 import org.apache.flink.statefun.flink.core.message.MessageFactory;
 import org.apache.flink.statefun.flink.core.message.MessageFactoryKey;
 import org.apache.flink.statefun.flink.core.message.MessageFactoryType;
@@ -159,6 +158,11 @@ public class TestUtils {
       return transactionId;
     }
 
+    @Override
+    public List<Address> getAddresses() {
+      return null;
+    }
+
     public void setCaller(Address address) { caller = address; }
 
     public Address getCaller() {
@@ -195,6 +199,21 @@ public class TestUtils {
     public void sendTransactionMessage(Address to, Object message, String id, TransactionMessage transactionMessage) {
       tpcMessagesSent.add(new AbstractMap.SimpleImmutableEntry<>(to, message));
       transactionId = id;
+    }
+
+    @Override
+    public void sendTransactionReadMessage(Address to, Object message, String transactionId, List<Address> addresses) {
+
+    }
+
+    @Override
+    public void sendDeadlockDetectionProbe(Address to, Address initiator) {
+
+    }
+
+    @Override
+    public void sendBlockingFunctions(Address to, String transactionId, List<Address> addresses) {
+
     }
 
     @Override

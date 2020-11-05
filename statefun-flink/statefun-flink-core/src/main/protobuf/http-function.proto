@@ -136,6 +136,8 @@ message FromFunction {
         repeated DelayedInvocation delayed_invocations = 3;
         repeated EgressMessage outgoing_egresses = 4;
         bool failed = 5;
+        Invocation outgoing_message_to_transaction = 6;
+        repeated Invocation unhandled_invocations = 7;
     }
 
     message TpcFunctionInvocationResponse {

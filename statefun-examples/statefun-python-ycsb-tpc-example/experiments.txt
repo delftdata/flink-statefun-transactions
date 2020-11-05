@@ -1,0 +1,23 @@
+Flink Statefun vs Flink Statefun with transactions
+    Vary:
+        Original statefun version vs. my version
+    Find:
+        Overhead
+
+Flink Statefun with tpc transactions
+    Vary:
+        Proportion of transfer vs CRUD operations / function invocations 
+        Number of keys/records (less keys leading to more locking)
+        Access distribution of keys (uniform vs zipfian)
+        Amount of succesful transaction (mostly to compare SAGAs and TPC)
+    Find:
+        Characteristics of the system
+
+Flink Statefun with Sagas
+    Vary:
+        Same
+    Find:
+        Characteristics
+        Compare against TPC
+
+Flink Statefun transactions vs. MongoDB

@@ -19,6 +19,7 @@ package org.apache.flink.statefun.flink.core.message;
 
 import java.io.IOException;
 import java.lang.reflect.Constructor;
+import java.util.List;
 import java.util.Objects;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
@@ -58,6 +59,11 @@ public final class MessageFactory {
   public Message from(Address from, Address to, Object payload,
                       String transactionId, Context.TransactionMessage transactionMessage) {
     return new SdkMessage(from, to, payload, transactionId, transactionMessage);
+  }
+
+  public Message from(Address from, Address to, Object payload, String transactionId,
+                      Context.TransactionMessage transactionMessage, List<Address> addresses) {
+    return new SdkMessage(from, to, payload, transactionId, transactionMessage, addresses);
   }
 
   // -------------------------------------------------------------------------------------------------------

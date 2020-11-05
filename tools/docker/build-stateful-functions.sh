@@ -62,7 +62,7 @@ cp ${core_jar} ${docker_context_flink}/lib/statefun-flink-core.jar
 cd ${docker_context_root}
 cp ${basedir}/Dockerfile ${docker_context_root}
 cp ${basedir}/docker-entry-point.sh ${docker_context_root}
-docker build . -t martijn-thesis-flink-statefun:${VERSION_TAG}
+docker build . -t thesis-flink-statefun:${VERSION_TAG}
 
 # clean again
 rm -rf ${docker_context_root}

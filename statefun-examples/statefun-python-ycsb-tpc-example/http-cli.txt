@@ -1,0 +1,15 @@
+# READ
+http 127.0.0.1/usertable/read/1
+
+# INSERT
+http POST 127.0.0.1/usertable/insert id=1 balance=10 fields:='{"field0":"test"}'
+http POST 127.0.0.1/usertable/insert id=2 balance=10 fields:='{"field0":"test"}'
+
+# UPDATE
+http POST 127.0.0.1/usertable/update id=1 fields:='{"test":"tes1tSDFSDF"}'
+
+# TRANSFER
+http POST 127.0.0.1/usertable/transfer outgoing_id=1 incoming_id=2 amount=5
+
+# DELETE (and transfer all)
+http POST 127.0.0.1/usertable/delete id=1 incoming_id=2

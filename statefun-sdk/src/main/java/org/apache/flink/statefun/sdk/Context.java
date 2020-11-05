@@ -8,7 +8,7 @@
  * with the License.  You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+uu *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,6 +18,7 @@
 package org.apache.flink.statefun.sdk;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import org.apache.flink.statefun.sdk.io.EgressIdentifier;
 
@@ -50,12 +51,15 @@ public interface Context {
   TransactionMessage getTransactionMessage();
   boolean isTransaction();
   String getTransactionId();
+  List<Address> getAddresses();
 
   enum TransactionMessage {
     PREPARE,
     ABORT,
     COMMIT,
-    SAGAS
+    SAGAS,
+    READ,
+    BLOCKING
   }
 
   /**
@@ -69,6 +73,35 @@ public interface Context {
    */
   void sendTransactionMessage(Address to, Object message, String transactionId,
                               Context.TransactionMessage transactionMessage);
+
+  /**
+   * Invokes another function as a chained call towards a TPC function locking the functions this passes.
+   * This would represent "READ" calls in relational database systems.
+   *
+   * @param to
+   * @param message
+   * @param transactionId
+   * @param addresses
+   */
+  void sendTransactionReadMessage(Address to, Object message, String transactionId,
+                                  List<Address> addresses);
+
+  /**
+   * Sends a deadlock detection probe to another function including the initiator.
+   *
+   * @param to
+   * @param initiator
+   */
+  void sendDeadlockDetectionProbe(Address to, Address initiator);
+
+  /**
+   * Send the functions currently blocking from a request reply function to the Tpc function.
+   *
+   * @param to
+   * @param transactionId
+   * @param addresses
+   */
+  void sendBlockingFunctions(Address to, String transactionId, List<Address> addresses);
 
   /**
    * Invokes another function with an input, identified by the target function's {@link Address}.

@@ -11,7 +11,6 @@ import static org.apache.flink.statefun.flink.core.TestUtils.FUNCTION_2_ADDR;
 
 import static org.apache.flink.statefun.flink.core.common.PolyglotUtil.sdkAddressToPolyglotAddress;
 import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.not;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 

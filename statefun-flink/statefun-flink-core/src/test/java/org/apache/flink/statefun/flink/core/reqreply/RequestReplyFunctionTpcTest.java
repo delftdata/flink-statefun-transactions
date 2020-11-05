@@ -543,7 +543,27 @@ public class RequestReplyFunctionTpcTest {
         }
 
         @Override
+        public List<Address> getAddresses() {
+            return null;
+        }
+
+        @Override
         public void sendTransactionMessage(Address to, Object message, String transactionId, TransactionMessage transactionMessage) {
+
+        }
+
+        @Override
+        public void sendTransactionReadMessage(Address to, Object message, String transactionId, List<Address> addresses) {
+
+        }
+
+        @Override
+        public void sendDeadlockDetectionProbe(Address to, Address initiator) {
+
+        }
+
+        @Override
+        public void sendBlockingFunctions(Address to, String transactionId, List<Address> addresses) {
 
         }
 

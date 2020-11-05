@@ -63,6 +63,8 @@ class InvocationContext:
         self.add_egress(context, invocation_result)
         # Add the failed status to the invocation result 
         self.add_failed_status(context, invocation_result)
+        self.add_transaction_invocation(context, invocation_result)
+        self.add_unhandled_invocations(context, invocation_result)
         # reset the state for the next invocation
         self.batch = None
         self.context = None
@@ -125,6 +127,28 @@ class InvocationContext:
     def add_failed_status(context, invocation_result):
         invocation_result.failed = context.failed
 
+    # Add transaction_invocation to invocation_result
+    @staticmethod
+    def add_transaction_invocation(context, invocation_result):
+        if context.transaction_invocation:
+            typename, id, message = context.transaction_invocation
+            namespace, type = parse_typename(typename)
+            invocation_result.outgoing_message_to_transaction.target.namespace = namespace
+            invocation_result.outgoing_message_to_transaction.target.type = type
+            invocation_result.outgoing_message_to_transaction.target.id = id
+            invocation_result.outgoing_message_to_transaction.argument.CopyFrom(message)
+
+    @staticmethod
+    def add_unhandled_invocations(context, invocation_result):
+        unhandled_invocations = invocation_result.unhandled_invocations
+        for invocation in context.unhandled_invocations:
+            unhandled = unhandled_invocations.add()
+            unhandled.target.namespace = invocation.caller.namespace
+            unhandled.target.type = invocation.caller.type
+            unhandled.target.id = invocation.caller.id
+            unhandled.target.CopyFrom(invocation.caller)
+            unhandled.argument.CopyFrom(invocation.argument)
+
 
 class RequestReplyHandler:
     def __init__(self, functions):
@@ -143,12 +167,15 @@ class RequestReplyHandler:
         target_function = ic.target_function
         fun = target_function.func
         for invocation in batch:
-            context.prepare(invocation)
-            unpacked = target_function.unpack_any(invocation.argument)
-            if not unpacked:
-                fun(context, invocation.argument)
+            if not context.transaction_invocation:
+                context.prepare(invocation)
+                unpacked = target_function.unpack_any(invocation.argument)
+                if not unpacked:
+                    fun(context, invocation.argument)
+                else:
+                    fun(context, unpacked)
             else:
-                fun(context, unpacked)
+                context.add_unhandled_invocation(invocation)
 
 
 class AsyncRequestReplyHandler:
@@ -168,12 +195,15 @@ class AsyncRequestReplyHandler:
         target_function = ic.target_function
         fun = target_function.func
         for invocation in batch:
-            context.prepare(invocation)
-            unpacked = target_function.unpack_any(invocation.argument)
-            if not unpacked:
-                await fun(context, invocation.argument)
+            if not context.transaction_invocation:
+                context.prepare(invocation)
+                unpacked = target_function.unpack_any(invocation.argument)
+                if not unpacked:
+                    await fun(context, invocation.argument)
+                else:
+                    await fun(context, unpacked)
             else:
-                await fun(context, unpacked)
+                context.add_unhandled_invocation(invocation)
 
 
 class BatchContext(object):
@@ -188,7 +218,11 @@ class BatchContext(object):
         self.messages = []
         self.delayed_messages = []
         self.egresses = []
-        
+
+        # add if a transaction was invocated with a "read" value, locking this function, so stopping this batch
+        self.transaction_invocation = None
+        self.unhandled_invocations = []
+
         # Add success status boolean to define success/failure state of atomic functions
         self.failed = False
 
@@ -257,6 +291,40 @@ class BatchContext(object):
         any = Any()
         any.Pack(message)
         self.send(typename, id, any)
+
+    def send_transaction_invocation(self, typename: str, id: str, message: Any):
+        """
+        Send a message to a function of type and id.
+
+        :param typename: the target function type name, for example: "org.apache.flink.statefun/greeter"
+        :param id: the id of the target function
+        :param message: the message to send
+        """
+        if not typename:
+            raise ValueError("missing type name")
+        if not id:
+            raise ValueError("missing id")
+        if not message:
+            raise ValueError("missing message")
+        out = (typename, id, message)
+        self.transaction_invocation = out
+
+    def pack_and_send_transaction_invocation(self, typename: str, id: str, message):
+        """
+        Send a Protobuf message to a function.
+
+        This variant of send, would first pack this message
+        into a google.protobuf.Any and then send it.
+
+        :param typename: the target function type name, for example: "org.apache.flink.statefun/greeter"
+        :param id: the id of the target function
+        :param message: the message to pack into an Any and the send.
+        """
+        if not message:
+            raise ValueError("missing message")
+        any = Any()
+        any.Pack(message)
+        self.send_transaction_invocation(typename, id, any)
 
     def reply(self, message: Any):
         """
@@ -349,3 +417,6 @@ class BatchContext(object):
         :param failed_status: true for a failed invocation otherwise false
         """
         self.failed = failed_status
+
+    def add_unhandled_invocation(self, invocation):
+        self.unhandled_invocations.append(invocation)
