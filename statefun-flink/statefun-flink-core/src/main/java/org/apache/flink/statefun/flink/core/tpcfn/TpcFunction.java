@@ -1,7 +1,6 @@
 package org.apache.flink.statefun.flink.core.tpcfn;
 
 import com.google.protobuf.Any;
-import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.ImmutableTriple;
 import org.apache.flink.statefun.flink.core.backpressure.InternalContext;
 import org.apache.flink.statefun.flink.core.functions.StatefulFunctionInvocationException;
