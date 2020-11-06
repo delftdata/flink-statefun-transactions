@@ -22,6 +22,7 @@ import inspect
 from statefun.kafka_egress_pb2 import KafkaProducerRecord
 from statefun.kinesis_egress_pb2 import KinesisEgressRecord
 
+
 class SdkAddress(object):
     def __init__(self, namespace, type, identity):
         self.namespace = namespace
@@ -157,6 +158,7 @@ def deduce_protobuf_types(fn):
 class StatefulFunctions:
     def __init__(self):
         self.functions = {}
+        self.exception_handlers = {}
 
     def register(self, typename: str, fun):
         """registers a StatefulFunction function instance, under the given namespace with the given function type. """
@@ -165,6 +167,13 @@ class StatefulFunctions:
         namespace, type = parse_typename(typename)
         expected_messages = deduce_protobuf_types(fun)
         self.functions[(namespace, type)] = StatefulFunction(fun, expected_messages)
+
+    def register_exception_handler(self,
+                                   exception_class,
+                                   fun):
+        if fun is None:
+            raise ValueError("exception handler must be a function")
+        self.exception_handlers[exception_class] = fun
 
     def bind(self, typename):
         """wraps a StatefulFunction instance with a given namespace and type.
@@ -185,8 +194,21 @@ class StatefulFunctions:
 
         return wrapper
 
+    def bind_exception_handler(self, exception_class):
+        def wrapper(function):
+            self.register_exception_handler(exception_class, function)
+            return function
+
+        return wrapper
+
     def for_type(self, namespace, type):
         return self.functions[(namespace, type)]
+
+    def for_exception(self, exception_class):
+        if exception_class in self.exception_handlers:
+            return self.exception_handlers[exception_class]
+        else:
+            return None
 
 
 def kafka_egress_record(topic: str, value, key: str = None):

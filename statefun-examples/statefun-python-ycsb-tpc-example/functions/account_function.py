@@ -1,14 +1,20 @@
-from statefun import StatefulFunctions, RequestReplyHandler, kafka_egress_record
+from statefun import StatefulFunctions
+from statefun import RequestReplyHandler
+from statefun import kafka_egress_record
 
 import typing
 import logging
 
 from google.protobuf.any_pb2 import Any
-from google.protobuf.json_format import MessageToJson
 
 from messages_pb2 import Response, Wrapper, State
 from messages_pb2 import Insert, Read, Update, DeleteAndTransferAll
 from messages_pb2 import Transfer, Delete, AddCredit, SubtractCredit
+
+from exceptions import NotFoundException
+from exceptions import AlreadyExistsException
+from exceptions import UnknownMessageException
+from exceptions import NotEnoughCreditException
 
 # Logging config
 FORMAT = '[%(asctime)s] %(levelname)-8s %(message)s'
@@ -24,12 +30,12 @@ def account_function(context, request: typing.Union[Wrapper, Delete, AddCredit, 
     # Get state
     state = context.state('state').unpack(State)
 
-    ### handle message
+    # handle message
     if isinstance(request, Wrapper):
         # messages from outside
         request_id = request.request_id
         message = request.message
-    
+
         if message.Is(Insert.DESCRIPTOR):
             insert = Insert()
             message.Unpack(insert)
@@ -47,8 +53,7 @@ def account_function(context, request: typing.Union[Wrapper, Delete, AddCredit, 
             message.Unpack(delete)
             handle_delete_and_transfer_all(context, state, delete, request_id)
         else:
-            context.set_failed(True)
-            send_response(context, request_id, 500)
+            raise UnknownMessageException(request_id)
     else:
         # internal messages
         if isinstance(request, Delete):
@@ -58,7 +63,27 @@ def account_function(context, request: typing.Union[Wrapper, Delete, AddCredit, 
         elif isinstance(request, SubtractCredit):
             handle_subtract_credit(context, state, request)
         else:
-            context.set_failed(True)
+            raise UnknownMessageException(request_id)
+
+
+@functions.bind_exception_handler(AlreadyExistsException)
+def handle_already_exists(context, request_id):
+    send_response(context, request_id, 400)
+
+
+@functions.bind_exception_handler(NotFoundException)
+def handle_not_found(context, request_id):
+    send_response(context, request_id, 404)
+
+
+@functions.bind_exception_handler(UnknownMessageException)
+def handle_unkown_message(context, request_id):
+    send_response(context, request_id, 500)
+
+
+@functions.bind_exception_handler(NotEnoughCreditException)
+def handle_not_enough_credit(context, request_id):
+    send_response(context, request_id, 401)
 
 
 def handle_insert(context, state: State, message: Insert, request_id: str) -> None:
@@ -68,22 +93,19 @@ def handle_insert(context, state: State, message: Insert, request_id: str) -> No
         context.state('state').pack(state)
         send_response(context, request_id, 200, state)
     else:
-        send_response(context, request_id, 404)
-        context.set_failed(True)
+        raise AlreadyExistsException(request_id)
 
 
 def handle_read(context, state: State, message: Read, request_id: str) -> None:
     if not state:
-        send_response(context, request_id, 404)
-        context.set_failed(True)
+        raise NotFoundException(request_id)
     else:
         send_response(context, request_id, 200, state)
 
 
 def handle_update(context, state: State, message: Update, request_id: str) -> None:
     if not state:
-        send_response(context, request_id, 404)
-        context.set_failed(True)
+        raise NotFoundException(request_id)
     else:
         for key in message.updates:
             state.fields[key] = message.updates[key]
@@ -93,24 +115,23 @@ def handle_update(context, state: State, message: Update, request_id: str) -> No
 
 def handle_delete_and_transfer_all(context, state: State, message: DeleteAndTransferAll, request_id: str) -> None:
     if not state:
-        send_response(context, request_id, 404)
-        context.set_failed(True)
+        raise NotFoundException(request_id)
     else:
         transfer = Transfer(outgoing_id=message.id, incoming_id=message.incoming_id, amount=state.balance)
         context.pack_and_send_transaction_invocation("ycsb-example/delete_function", request_id, transfer)
 
 
-## Internal messages
+# Internal messages
 def handle_delete(context, state: State, message: Delete) -> None:
     if not state:
-        context.set_failed(True)
+        raise NotFoundException("NA")
     else:
         del context['state']
 
 
 def handle_add_credit(context, state: State, message: AddCredit) -> None:
-    if not state: 
-        context.set_failed(True)
+    if not state:
+        raise NotFoundException("NA")
     else:
         state.balance += message.amount
         context.state('state').pack(state)
@@ -118,13 +139,13 @@ def handle_add_credit(context, state: State, message: AddCredit) -> None:
 
 def handle_subtract_credit(context, state: State, message: SubtractCredit) -> None:
     if not state:
-        context.set_failed(True)
+        raise NotFoundException("NA")
     else:
         if state.balance >= message.amount:
             state.balance -= message.amount
             context.state('state').pack(state)
         else:
-            context.set_failed(True)
+            raise NotEnoughCreditException("NA")
 
 
 def send_response(context, request_id: str, status_code: int, message=None) -> None:
@@ -133,7 +154,6 @@ def send_response(context, request_id: str, status_code: int, message=None) -> N
         out = Any()
         out.Pack(message)
         response.message.CopyFrom(out)
-    
     egress_message = kafka_egress_record(topic="responses", key=request_id, value=response)
     context.pack_and_send_egress("ycsb-example/kafka-egress", egress_message)
 
