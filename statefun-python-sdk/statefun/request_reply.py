@@ -16,23 +16,23 @@
 # limitations under the License.
 ################################################################################
 from datetime import timedelta
+import copy
 
 from google.protobuf.any_pb2 import Any
 
 from statefun.core import SdkAddress
 from statefun.core import AnyStateHandle
 from statefun.core import parse_typename
+from statefun.core import StatefulFunctions
 
 # generated function protocol
 from statefun.request_reply_pb2 import FromFunction
 from statefun.request_reply_pb2 import ToFunction
-
-# import enum for function type
-from enum import Enum
+from statefun.exceptions import FunctionInvocationException
 
 
 class InvocationContext:
-    def __init__(self, functions):
+    def __init__(self, functions: StatefulFunctions):
         self.functions = functions
         self.batch = None
         self.context = None
@@ -61,7 +61,7 @@ class InvocationContext:
         self.add_outgoing_messages(context, invocation_result)
         self.add_delayed_messages(context, invocation_result)
         self.add_egress(context, invocation_result)
-        # Add the failed status to the invocation result 
+        # Add the failed status to the invocation result
         self.add_failed_status(context, invocation_result)
         self.add_transaction_invocation(context, invocation_result)
         self.add_unhandled_invocations(context, invocation_result)
@@ -169,11 +169,20 @@ class RequestReplyHandler:
         for invocation in batch:
             if not context.transaction_invocation:
                 context.prepare(invocation)
-                unpacked = target_function.unpack_any(invocation.argument)
-                if not unpacked:
-                    fun(context, invocation.argument)
-                else:
-                    fun(context, unpacked)
+                untouched_context = copy.deepcopy(context)
+                try:
+                    unpacked = target_function.unpack_any(invocation.argument)
+                    if not unpacked:
+                        fun(context, invocation.argument)
+                    else:
+                        fun(context, unpacked)
+                except FunctionInvocationException as e:
+                    context = untouched_context
+                    ic.context = context
+                    fun = ic.functions.for_exception(e.__class__)
+                    if fun:
+                        fun(context, e.message)
+                    context.set_failed(True)
             else:
                 context.add_unhandled_invocation(invocation)
 
@@ -197,11 +206,20 @@ class AsyncRequestReplyHandler:
         for invocation in batch:
             if not context.transaction_invocation:
                 context.prepare(invocation)
-                unpacked = target_function.unpack_any(invocation.argument)
-                if not unpacked:
-                    await fun(context, invocation.argument)
-                else:
-                    await fun(context, unpacked)
+                untouched_context = copy.deepcopy(context)
+                try:
+                    unpacked = target_function.unpack_any(invocation.argument)
+                    if not unpacked:
+                        fun(context, invocation.argument)
+                    else:
+                        fun(context, unpacked)
+                except FunctionInvocationException as e:
+                    context = untouched_context
+                    ic.context = context
+                    fun = ic.functions.for_exception(e.__class__)
+                    if fun:
+                        fun(context, e.message)
+                    context.set_failed(True)
             else:
                 context.add_unhandled_invocation(invocation)
 
@@ -420,3 +438,4 @@ class BatchContext(object):
 
     def add_unhandled_invocation(self, invocation):
         self.unhandled_invocations.append(invocation)
+

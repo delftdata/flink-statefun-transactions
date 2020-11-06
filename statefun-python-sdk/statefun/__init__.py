@@ -26,3 +26,4 @@ from statefun.sagas import AsyncSagasHandler
 
 from statefun.core import kafka_egress_record
 from statefun.core import kinesis_egress_record
+from statefun.exceptions import FunctionInvocationException
