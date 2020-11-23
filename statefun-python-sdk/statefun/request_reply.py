@@ -182,7 +182,7 @@ class RequestReplyHandler:
                     fun = ic.functions.for_exception(e.__class__)
                     if fun:
                         fun(context, e.message)
-                    context.set_failed(True)
+                    context.failed = True
             else:
                 context.add_unhandled_invocation(invocation)
 
@@ -219,7 +219,7 @@ class AsyncRequestReplyHandler:
                     fun = ic.functions.for_exception(e.__class__)
                     if fun:
                         fun(context, e.message)
-                    context.set_failed(True)
+                    context.failed = True
             else:
                 context.add_unhandled_invocation(invocation)
 
@@ -427,15 +427,7 @@ class BatchContext(object):
         self.send_egress(typename, any)
 
     # --------------------------------------------------------------------------------------
-    # failure status for atomic messages
+    # Adding unhandled invocations back in case of read lock
     # --------------------------------------------------------------------------------------
-    def set_failed(self, failed_status):
-        """
-        Sets the fail attribute of the context to allow for atomic functions.
-        :param failed_status: true for a failed invocation otherwise false
-        """
-        self.failed = failed_status
-
     def add_unhandled_invocation(self, invocation):
         self.unhandled_invocations.append(invocation)
-

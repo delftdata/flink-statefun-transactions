@@ -138,16 +138,13 @@ message FromFunction {
         bool failed = 5;
         Invocation outgoing_message_to_transaction = 6;
         repeated Invocation unhandled_invocations = 7;
-    }
+    } 
 
     message TpcFunctionInvocationResponse {
         repeated Invocation atomic_invocations = 1;
-        repeated Invocation outgoing_messages_on_success = 2;
-        repeated Invocation outgoing_messages_on_failure = 3;
-        repeated DelayedInvocation delayed_invocations_on_success = 4;
-        repeated DelayedInvocation delayed_invocations_on_failure = 5;
-        repeated EgressMessage outgoing_egresses_on_success = 6;
-        repeated EgressMessage outgoing_egresses_on_failure = 7;
+        InvocationResponse success_response = 2;
+        InvocationResponse failure_response = 3;
+        InvocationResponse retryable_response = 4;
     }
 
     message SagasFunctionPair {
@@ -157,12 +154,8 @@ message FromFunction {
 
     message SagasFunctionInvocationResponse {
         repeated SagasFunctionPair invocation_pairs = 1;
-        repeated Invocation outgoing_messages_on_success = 2;
-        repeated Invocation outgoing_messages_on_failure = 3;
-        repeated DelayedInvocation delayed_invocations_on_success = 4;
-        repeated DelayedInvocation delayed_invocations_on_failure = 5;
-        repeated EgressMessage outgoing_egresses_on_success = 6;
-        repeated EgressMessage outgoing_egresses_on_failure = 7;
+        InvocationResponse success_response = 2;
+        InvocationResponse failure_response = 3;
     }
 
     oneof response {

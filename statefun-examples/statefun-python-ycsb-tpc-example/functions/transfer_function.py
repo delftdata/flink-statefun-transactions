@@ -29,11 +29,6 @@ def transfer_function(context, request: Wrapper):
         transfer = Transfer()
         message.Unpack(transfer)
         handle_transfer(context, transfer, request_id)
-    else:
-        response = Response(request_id=request_id, status_code=500)
-        egress_message = kafka_egress_record(topic="responses", key=request_id, value=response)
-        context.pack_and_send_egress("ycsb-example/kafka-egress", egress_message, success=False)
-
 
 
 def handle_transfer(context, message: Transfer, request_id: str) -> None:
@@ -46,12 +41,17 @@ def handle_transfer(context, message: Transfer, request_id: str) -> None:
     # Send on success
     response = Response(request_id=request_id, status_code=200)
     egress_message = kafka_egress_record(topic="responses", key=request_id, value=response)
-    context.pack_and_send_egress("ycsb-example/kafka-egress", egress_message, success=True)
+    context.pack_and_send_egress_on_success("ycsb-example/kafka-egress", egress_message)
     
     # Send on failure
     response = Response(request_id=request_id, status_code=422)
     egress_message = kafka_egress_record(topic="responses", key=request_id, value=response)
-    context.pack_and_send_egress("ycsb-example/kafka-egress", egress_message, success=False)
+    context.pack_and_send_egress_on_failure("ycsb-example/kafka-egress", egress_message)
+
+    # Send on retryable (e.g. deadlock)
+    response = Response(request_id=request_id, status_code=401)
+    egress_message = kafka_egress_record(topic="responses", key=request_id, value=response)
+    context.pack_and_send_egress_on_retryable("ycsb-example/kafka-egress", egress_message)
 
 
 handler = TwoPhaseCommitHandler(functions)
@@ -61,6 +61,7 @@ from flask import make_response
 from flask import Flask
 
 app = Flask(__name__)
+
 
 @app.route('/statefun', methods=['POST'])
 def handle():

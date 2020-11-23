@@ -1,4 +1,0 @@
-# apache-flink-statefun
-flask
-gunicorn
-protobuf

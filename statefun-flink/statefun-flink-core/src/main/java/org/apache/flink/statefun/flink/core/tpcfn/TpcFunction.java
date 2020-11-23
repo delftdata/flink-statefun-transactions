@@ -8,6 +8,7 @@ import org.apache.flink.statefun.flink.core.generated.Payload;
 import org.apache.flink.statefun.flink.core.metrics.RemoteInvocationMetrics;
 import org.apache.flink.statefun.flink.core.polyglot.generated.Address;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction;
+import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.InvocationResponse;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.ResponseToTransactionFunction;
 import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction;
 import org.apache.flink.statefun.flink.core.reqreply.RequestReplyClient;
@@ -99,7 +100,7 @@ public class TpcFunction implements StatefulFunction {
                 org.apache.flink.statefun.sdk.Address initiator = context.getAddresses().get(0);
                 if (initiator.equals(context.self())) {
                     LOGGER.info("Found deadlock. Aborting transaction!");
-                    handleFailure((InternalContext) context);
+                    handleRetryable((InternalContext) context);
                     cleanUp((InternalContext) context);
                     return;
                 }
@@ -261,9 +262,7 @@ public class TpcFunction implements StatefulFunction {
                 context.sendTransactionMessage(to, message, currentTransactionId.get(),
                         Context.TransactionMessage.COMMIT);
         }
-        handleEgressMessages(context, currentTransactionResults.get().getOutgoingEgressesOnSuccessList());
-        handleOutgoingMessages(context, currentTransactionResults.get().getOutgoingMessagesOnSuccessList());
-        handleOutgoingDelayedMessages(context, currentTransactionResults.get().getDelayedInvocationsOnSuccessList());
+        handleResults(context, currentTransactionResults.get().getSuccessResponse());
     }
 
     private void handleFailure(InternalContext context) {
@@ -274,9 +273,18 @@ public class TpcFunction implements StatefulFunction {
             context.sendTransactionMessage(to, message, currentTransactionId.get(),
                     Context.TransactionMessage.ABORT);
         }
-        handleEgressMessages(context, currentTransactionResults.get().getOutgoingEgressesOnFailureList());
-        handleOutgoingMessages(context, currentTransactionResults.get().getOutgoingMessagesOnFailureList());
-        handleOutgoingDelayedMessages(context, currentTransactionResults.get().getDelayedInvocationsOnFailureList());
+        handleResults(context, currentTransactionResults.get().getFailureResponse());
+    }
+
+    private void handleRetryable(InternalContext context) {
+        LOGGER.info("Handling deadlock case for this transaction.");
+        for(Address address : currentTransactionFunctions.keys()) {
+            final org.apache.flink.statefun.sdk.Address to = polyglotAddressToSdkAddress(address);
+            final Any message = Any.pack(Payload.getDefaultInstance());
+            context.sendTransactionMessage(to, message, currentTransactionId.get(),
+                    Context.TransactionMessage.ABORT);
+        }
+        handleResults(context, currentTransactionResults.get().getRetryableResponse());
     }
 
     private void cleanUp(InternalContext context) {
@@ -303,6 +311,12 @@ public class TpcFunction implements StatefulFunction {
         batch.set(b);
         LOGGER.info("Executing next transaction from queue!");
         startTransaction(context, elem.getLeft(), elem.getMiddle(), elem.getRight());
+    }
+
+    private void handleResults(Context context, InvocationResponse invocationResponse) {
+        handleEgressMessages(context, invocationResponse.getOutgoingEgressesList());
+        handleOutgoingMessages(context, invocationResponse.getOutgoingMessagesList());
+        handleOutgoingDelayedMessages(context, invocationResponse.getDelayedInvocationsList());
     }
 
     private void handleEgressMessages(Context context, List<FromFunction.EgressMessage> egressMessages) {

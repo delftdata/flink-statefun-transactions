@@ -1,6 +1,0 @@
-.pytest_cache
-target
-__pycache__
-venv
-.vscode/
-.idea
