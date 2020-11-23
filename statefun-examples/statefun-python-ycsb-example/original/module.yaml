@@ -1,0 +1,50 @@
+version: "1.0"
+module:
+  meta:
+    type: remote
+  spec:
+    functions:
+        - function:
+            meta:
+                kind: http
+                type: ycsb-example/account_function
+            spec:
+                endpoint: http://account-function:80/statefun
+                states:
+                - state
+                maxNumBatchRequests: 500
+                timeout: 2min
+
+
+    ingresses:
+        - ingress:
+            meta:
+                type: statefun.kafka.io/routable-protobuf-ingress
+                id: python-example/kafka-ingress
+            spec:
+                address: kafka-cluster-kafka-bootstrap:9092
+                consumerGroupId: statefun
+                topics:
+                    - topic: insert
+                      typeUrl: com.googleapis/yscb_example.messages.Wrapper
+                      targets:
+                        - ycsb-example/account_function
+                    - topic: read
+                      typeUrl: com.googleapis/yscb_example.messages.Wrapper
+                      targets:
+                        - ycsb-example/account_function    
+                    - topic: update
+                      typeUrl: com.googleapis/yscb_example.messages.Wrapper
+                      targets:
+                        - ycsb-example/account_function    
+
+    egresses:
+        - egress:
+            meta:
+                type: statefun.kafka.io/generic-egress
+                id: ycsb-example/kafka-egress
+            spec:
+                address: kafka-cluster-kafka-bootstrap:9092
+                deliverySemantic:
+                    type: at-least-once
+                transactionTimeoutMillis: 100000

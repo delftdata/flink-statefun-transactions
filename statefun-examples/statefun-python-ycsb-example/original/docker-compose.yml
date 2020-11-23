@@ -1,0 +1,63 @@
+version: "2.1"
+services:
+    ### Zookeeper and Kafka to serve as ingress and egress for the application 
+    zookeeper:
+        image: wurstmeister/zookeeper
+        ports:
+            - "2181:2181"
+    kafka-broker:
+        image: wurstmeister/kafka:2.12-2.0.1
+        ports:
+            - "9092:9092"
+        environment:
+            HOSTNAME_COMMAND: "route -n | awk '/UG[ \t]/{print $$2}'"
+        # below is "TOPIC1:PARTITIONS:REPLICATIONS,TOPIC2:PARTIONS:REPLICATIONS..."
+            KAFKA_CREATE_TOPICS: "insert:8:1,read:8:1,update:8:1,responses:8:1"
+            KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+            KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+        depends_on:
+            - zookeeper
+
+    ### Statefun worker and master
+    master:
+        build:
+            dockerfile: docker/Dockerfile.statefun
+            context: .
+        image: martijndeh/extended-statefun-ycsb-original-statefun
+        expose:
+            - "6123"
+        ports:
+            - "8081:8081"
+        environment:
+            - ROLE=master
+            - MASTER_HOST=master
+        # volumes:
+        #   - ./checkpoint-dir:/checkpoint-dir
+    worker:
+        build:
+            dockerfile: docker/Dockerfile.statefun
+            context: .
+        image: martijndeh/extended-statefun-ycsb-original-statefun
+        expose:
+            - "6121"
+            - "6122"
+        depends_on:
+            - master
+            - kafka-broker
+        links:
+            - "master:master"
+            - "kafka-broker:kafka-cluster-kafka-bootstrap"
+        environment:
+            - ROLE=worker
+            - MASTER_HOST=master
+        # volumes:
+        #   - ./checkpoint-dir:/checkpoint-dir
+
+    ### Functions
+    account-function:
+        build:
+            context: .
+            dockerfile: docker/Dockerfile.account
+        image: martijndeh/extended-statefun-ycsb-original-account
+        expose:
+            - 80

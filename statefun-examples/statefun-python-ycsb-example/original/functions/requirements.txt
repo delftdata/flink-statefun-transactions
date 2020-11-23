@@ -1,0 +1,4 @@
+apache-flink-statefun==2.2.0
+flask
+gunicorn
+protobuf

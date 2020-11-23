@@ -1,0 +1,40 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: account-function
+spec:
+  selector:
+    matchLabels:
+      service: account-function
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        service: account-function
+    spec:
+      containers:
+        - name: account-function
+          image: martijndeh/extended-statefun-ycsb-sagas-account
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "0.25Gi"
+              cpu: "100m"
+            limits:
+              memory: "0.25Gi"
+              cpu: "100m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: account-function
+spec:
+  type: ClusterIP
+  selector:
+    service: account-function
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
