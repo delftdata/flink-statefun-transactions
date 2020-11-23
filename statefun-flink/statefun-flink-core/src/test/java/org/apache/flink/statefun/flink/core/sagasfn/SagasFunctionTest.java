@@ -155,6 +155,17 @@ public class SagasFunctionTest {
     }
 
     private AsyncOperationResult standardAsyncOperationResult() {
+        FromFunction.InvocationResponse.Builder successResponse =
+                FromFunction.InvocationResponse.newBuilder()
+                        .addOutgoingMessages(FromFunction.Invocation.getDefaultInstance())
+                        .addOutgoingMessages(FromFunction.Invocation.getDefaultInstance())
+                        .addOutgoingMessages(FromFunction.Invocation.getDefaultInstance());
+
+        FromFunction.InvocationResponse.Builder failureResponse =
+                FromFunction.InvocationResponse.newBuilder()
+                        .addOutgoingMessages(FromFunction.Invocation.getDefaultInstance())
+                        .addOutgoingMessages(FromFunction.Invocation.getDefaultInstance());
+
         FromFunction.SagasFunctionInvocationResponse.Builder sagasFunctionInvocationResponse =
                 FromFunction.SagasFunctionInvocationResponse.newBuilder()
                     .addInvocationPairs(
@@ -169,11 +180,8 @@ public class SagasFunctionTest {
                                             .setTarget(sdkAddressToPolyglotAddress(FUNCTION_2_ADDR)))
                                     .setCompensatingMessage(FromFunction.Invocation.newBuilder()
                                             .setTarget(sdkAddressToPolyglotAddress(FUNCTION_2_ADDR))))
-                    .addOutgoingMessagesOnSuccess(FromFunction.Invocation.getDefaultInstance())
-                    .addOutgoingMessagesOnSuccess(FromFunction.Invocation.getDefaultInstance())
-                    .addOutgoingMessagesOnSuccess(FromFunction.Invocation.getDefaultInstance())
-                    .addOutgoingMessagesOnFailure(FromFunction.Invocation.getDefaultInstance())
-                    .addOutgoingMessagesOnFailure(FromFunction.Invocation.getDefaultInstance());
+                    .setSuccessResponse(successResponse)
+                    .setFailureResponse(failureResponse);
 
 
         FromFunction response =

@@ -6,6 +6,7 @@ import org.apache.flink.statefun.flink.core.functions.StatefulFunctionInvocation
 import org.apache.flink.statefun.flink.core.metrics.RemoteInvocationMetrics;
 import org.apache.flink.statefun.flink.core.polyglot.generated.Address;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction;
+import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.InvocationResponse;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.ResponseToTransactionFunction;
 import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction;
 import org.apache.flink.statefun.flink.core.reqreply.RequestReplyClient;
@@ -187,9 +188,7 @@ public class SagasFunction implements StatefulFunction {
 
     private void handleSuccess(InternalContext context) {
         LOGGER.info("Handling success case for SAGAS transaction: " + context.self().type().toString());
-        handleEgressMessages(context, currentTransactionResults.get().getOutgoingEgressesOnSuccessList());
-        handleOutgoingMessages(context, currentTransactionResults.get().getOutgoingMessagesOnSuccessList());
-        handleOutgoingDelayedMessages(context, currentTransactionResults.get().getDelayedInvocationsOnSuccessList());
+        handleResults(context, currentTransactionResults.get().getSuccessResponse());
     }
 
     private void handleFailure(InternalContext context) {
@@ -202,9 +201,13 @@ public class SagasFunction implements StatefulFunction {
                 sendCompensatingMessage(context, invocationPair);
             }
         }
-        handleEgressMessages(context, currentTransactionResults.get().getOutgoingEgressesOnFailureList());
-        handleOutgoingMessages(context, currentTransactionResults.get().getOutgoingMessagesOnFailureList());
-        handleOutgoingDelayedMessages(context, currentTransactionResults.get().getDelayedInvocationsOnFailureList());
+        handleResults(context, currentTransactionResults.get().getFailureResponse());
+    }
+
+    private void handleResults(InternalContext context, InvocationResponse invocationResponse) {
+        handleEgressMessages(context, invocationResponse.getOutgoingEgressesList());
+        handleOutgoingMessages(context, invocationResponse.getOutgoingMessagesList());
+        handleOutgoingDelayedMessages(context, invocationResponse.getDelayedInvocationsList());
     }
 
     private void cleanUp(InternalContext context) {

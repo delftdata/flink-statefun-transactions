@@ -155,6 +155,17 @@ public class TpcFunctionTest {
     }
 
     private AsyncOperationResult standardAsyncOperationResult() {
+        FromFunction.InvocationResponse.Builder successResponse =
+                FromFunction.InvocationResponse.newBuilder()
+                        .addOutgoingMessages(FromFunction.Invocation.getDefaultInstance())
+                        .addOutgoingMessages(FromFunction.Invocation.getDefaultInstance())
+                        .addOutgoingMessages(FromFunction.Invocation.getDefaultInstance());
+
+        FromFunction.InvocationResponse.Builder failureResponse =
+                FromFunction.InvocationResponse.newBuilder()
+                        .addOutgoingMessages(FromFunction.Invocation.getDefaultInstance())
+                        .addOutgoingMessages(FromFunction.Invocation.getDefaultInstance());
+
         FromFunction.TpcFunctionInvocationResponse.Builder tpcFunctionInvocationResponse =
                 FromFunction.TpcFunctionInvocationResponse.newBuilder()
                         .addAtomicInvocations(
@@ -163,11 +174,8 @@ public class TpcFunctionTest {
                         .addAtomicInvocations(
                             FromFunction.Invocation.newBuilder()
                                     .setTarget(sdkAddressToPolyglotAddress(FUNCTION_2_ADDR)))
-                        .addOutgoingMessagesOnSuccess(FromFunction.Invocation.getDefaultInstance())
-                        .addOutgoingMessagesOnSuccess(FromFunction.Invocation.getDefaultInstance())
-                        .addOutgoingMessagesOnSuccess(FromFunction.Invocation.getDefaultInstance())
-                        .addOutgoingMessagesOnFailure(FromFunction.Invocation.getDefaultInstance())
-                        .addOutgoingMessagesOnFailure(FromFunction.Invocation.getDefaultInstance());
+                        .setSuccessResponse(successResponse)
+                        .setFailureResponse(failureResponse);
 
         FromFunction response =
                 FromFunction.newBuilder()

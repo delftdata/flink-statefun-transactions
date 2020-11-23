@@ -20,15 +20,11 @@ from datetime import timedelta
 from google.protobuf.any_pb2 import Any
 
 from statefun.core import SdkAddress
-from statefun.core import AnyStateHandle
 from statefun.core import parse_typename
 
 # generated function protocol
 from statefun.request_reply_pb2 import FromFunction
 from statefun.request_reply_pb2 import ToFunction
-
-# import enum for function type
-from enum import Enum
 
 
 class TwoPhaseCommitInvocationContext:
@@ -58,12 +54,10 @@ class TwoPhaseCommitInvocationContext:
         invocation_result = from_function.tpc_function_invocation_result
         context = self.context
         self.add_atomic_invocations(context, invocation_result)
-        self.add_success_outgoing_messages(context, invocation_result)
-        self.add_failure_outgoing_messages(context, invocation_result)
-        self.add_success_delayed_messages(context, invocation_result)
-        self.add_failure_delayed_messages(context, invocation_result)
-        self.add_success_egress(context, invocation_result)
-        self.add_failure_egress(context, invocation_result)
+        self.add_response(context.success_response, invocation_result.success_response)
+        self.add_response(context.failure_response, invocation_result.failure_response)
+        self.add_response(context.retryable_response, invocation_result.retryable_response)
+
         # reset the state for the next invocation
         self.batch = None
         self.context = None
@@ -84,77 +78,40 @@ class TwoPhaseCommitInvocationContext:
             outgoing.argument.CopyFrom(message)
 
     @staticmethod
-    def add_success_outgoing_messages(context, invocation_result):
-        outgoing_messages = invocation_result.outgoing_messages_on_success
-        for typename, id, message in context.messages_on_success:
-            outgoing = outgoing_messages.add()
+    def add_response(context_response, invocation_result_response):
+        if 'messages' in context_response:
+            outgoing_invocations = invocation_result_response.outgoing_messages
+            for typename, id, message in context_response['messages']:
+                outgoing = outgoing_invocations.add()
 
-            namespace, type = parse_typename(typename)
-            outgoing.target.namespace = namespace
-            outgoing.target.type = type
-            outgoing.target.id = id
-            outgoing.argument.CopyFrom(message)
+                namespace, type = parse_typename(typename)
+                outgoing.target.namespace = namespace
+                outgoing.target.type = type
+                outgoing.target.id = id
+                outgoing.argument.CopyFrom(message)
 
-    @staticmethod
-    def add_failure_outgoing_messages(context, invocation_result):
-        outgoing_messages = invocation_result.outgoing_messages_on_failure
-        for typename, id, message in context.messages_on_failure:
-            outgoing = outgoing_messages.add()
+        if 'delayed_messages' in context_response:
+            delayed_invocations = invocation_result_response.delayed_invocations
+            for delay, typename, id, message in context_response['delayed_messages']:
+                outgoing = delayed_invocations.add()
 
-            namespace, type = parse_typename(typename)
-            outgoing.target.namespace = namespace
-            outgoing.target.type = type
-            outgoing.target.id = id
-            outgoing.argument.CopyFrom(message)
+                namespace, type, parse_typename(typename)
+                outgoing.target.namespace = namespace
+                outgoing.target.type = type
+                outgoing.target.id = id
+                outgoing.delay_in_ms = delay
+                outgoing.argument.CopyFrom(message)
 
+        if 'egress_messages' in context_response:
+            outgoing_egresses = invocation_result_response.outgoing_egresses
+            for typename, message in context_response['egress_messages']:
+                outgoing = outgoing_egresses.add()
 
-    @staticmethod
-    def add_success_delayed_messages(context, invocation_result):
-        delayed_invocations = invocation_result.delayed_invocations_on_success
-        for delay, typename, id, message in context.delayed_messages_on_success:
-            outgoing = delayed_invocations.add()
+                namespace, type = parse_typename(typename)
+                outgoing.egress_namespace = namespace
+                outgoing.egress_type = type
+                outgoing.argument.CopyFrom(message)
 
-            namespace, type = parse_typename(typename)
-            outgoing.target.namespace = namespace
-            outgoing.target.type = type
-            outgoing.target.id = id
-            outgoing.delay_in_ms = delay
-            outgoing.argument.CopyFrom(message)
-
-    @staticmethod
-    def add_failure_delayed_messages(context, invocation_result):
-        delayed_invocations = invocation_result.delayed_invocations_on_failure
-        for delay, typename, id, message in context.delayed_messages_on_failure:
-            outgoing = delayed_invocations.add()
-
-            namespace, type = parse_typename(typename)
-            outgoing.target.namespace = namespace
-            outgoing.target.type = type
-            outgoing.target.id = id
-            outgoing.delay_in_ms = delay
-            outgoing.argument.CopyFrom(message)
-
-    @staticmethod
-    def add_success_egress(context, invocation_result):
-        outgoing_egresses = invocation_result.outgoing_egresses_on_success
-        for typename, message in context.egresses_on_success:
-            outgoing = outgoing_egresses.add()
-
-            namespace, type = parse_typename(typename)
-            outgoing.egress_namespace = namespace
-            outgoing.egress_type = type
-            outgoing.argument.CopyFrom(message)
-
-    @staticmethod
-    def add_failure_egress(context, invocation_result):
-        outgoing_egresses = invocation_result.outgoing_egresses_on_failure
-        for typename, message in context.egresses_on_failure:
-            outgoing = outgoing_egresses.add()
-
-            namespace, type = parse_typename(typename)
-            outgoing.egress_namespace = namespace
-            outgoing.egress_type = type
-            outgoing.argument.CopyFrom(message)
 
 
 class TwoPhaseCommitHandler:
@@ -215,12 +172,9 @@ class TwoPhaseCommitBatchContext(object):
         self.caller = None
         # outgoing messages
         self.atomic_invocations = []
-        self.messages_on_success = []
-        self.messages_on_failure = []
-        self.delayed_messages_on_success = []
-        self.delayed_messages_on_failure = []
-        self.egresses_on_success = []
-        self.egresses_on_failure = []
+        self.success_response = {}
+        self.failure_response = {}
+        self.retryable_response = {}
 
     def prepare(self, invocation):
         """setup per invocation """
@@ -233,8 +187,6 @@ class TwoPhaseCommitBatchContext(object):
     # --------------------------------------------------------------------------------------
     # messages
     # --------------------------------------------------------------------------------------
-
-
     def send_atomic_invocation(self, typename: str, id: str, message: Any):
         """
         Send a message to a function of type and id.
@@ -253,7 +205,6 @@ class TwoPhaseCommitBatchContext(object):
         out = (typename, id, message)
         self.atomic_invocations.append(out)
 
-
     def pack_and_send_atomic_invocation(self, typename: str, id: str, message):
         """
         Send a Protobuf message to a function.
@@ -271,15 +222,13 @@ class TwoPhaseCommitBatchContext(object):
         any.Pack(message)
         self.send_atomic_invocation(typename, id, any)
 
-
-    def send(self, typename: str, id: str, message: Any, success: bool):
+    def send_on_success(self, typename: str, id: str, message: Any):
         """
-        Send a message to a function of type and id.
-
+        Send a message to a function of type and id on successful transaction.
+]
         :param typename: the target function type name, for example: "org.apache.flink.statefun/greeter"
         :param id: the id of the target function
         :param message: the message to send
-        :param success: whether to send this message on success or failure
         """
 
         if not typename:
@@ -289,15 +238,14 @@ class TwoPhaseCommitBatchContext(object):
         if not message:
             raise ValueError("missing message")
         out = (typename, id, message)
-        if success:
-            self.messages_on_success.append(out)
+        if 'messages' in self.success_response:
+            self.success_response['messages'].append(out)
         else:
-            self.messages_on_failure.append(out)
+            self.success_response['messages'] = [out]
 
-
-    def pack_and_send(self, typename: str, id: str, message, success: bool):
+    def pack_and_send_on_success(self, typename: str, id: str, message):
         """
-        Send a Protobuf message to a function.
+        Send a Protobuf message to a function on successfull transaction.
 
         This variant of send, would first pack this message
         into a google.protobuf.Any and then send it.
@@ -305,47 +253,43 @@ class TwoPhaseCommitBatchContext(object):
         :param typename: the target function type name, for example: "org.apache.flink.statefun/greeter"
         :param id: the id of the target function
         :param message: the message to pack into an Any and the send.
-        :param success: whether to send this message on success or failure
         """
         if not message:
             raise ValueError("missing message")
         any = Any()
         any.Pack(message)
-        self.send(typename, id, any, success)
+        self.send_on_success(typename, id, any)
 
-    def reply(self, message: Any, success: bool):
+    def reply_on_success(self, message: Any):
         """
         Reply to the sender (assuming there is a sender)
 
         :param message: the message to reply to.
-        :param success: whether to send this message on success or failure
         """
         caller = self.caller
         if not caller:
             raise AssertionError(
                 "Unable to reply without a caller. Was this message was sent directly from an ingress?")
-        self.send(caller.typename(), caller.identity, message, success)
+        self.send_on_success(caller.typename(), caller.identity, message)
 
-    def pack_and_reply(self, message, success: bool):
+    def pack_and_reply_on_success(self, message):
         """
-        Reply to the sender (assuming there is a sender)
+        Reply to the sender (assuming there is a sender) if successfull transaction.
 
         :param message: the message to reply to.
-        :param success: whether to send this message on success or failure
         """
         any = Any()
         any.Pack(message)
-        self.reply(any, success)
+        self.reply_on_success(any)
 
-    def send_after(self, delay: timedelta, typename: str, id: str, message: Any, success: bool):
+    def send_after_on_success(self, delay: timedelta, typename: str, id: str, message: Any):
         """
-        Send a message to a function of type and id.
+        Send a message to a function of type and id after a delay, on success.
 
         :param delay: the amount of time to wait before sending this message.
         :param typename: the target function type name, for example: "org.apache.flink.statefun/greeter"
         :param id: the id of the target function
         :param message: the message to send
-        :param success: whether to send this message on success or failure
         """
         if not delay:
             raise ValueError("missing delay")
@@ -357,30 +301,29 @@ class TwoPhaseCommitBatchContext(object):
             raise ValueError("missing message")
         duration_ms = int(delay.total_seconds() * 1000.0)
         out = (duration_ms, typename, id, message)
-        if success:
-            self.delayed_messages_on_success.append(out)
+        if 'delayed_messages' in self.success_response:
+            self.success_response['delayed_messages'].append(out)
         else:
-            self.delayed_messages_on_failure.append(out)
+            self.success_response['delayed_messages'] = [out]
 
-    def pack_and_send_after(self, delay: timedelta, typename: str, id: str, message, success: bool):
+    def pack_and_send_after_on_success(self, delay: timedelta, typename: str, id: str, message):
         """
-        Send a message to a function of type and id.
+        Send a message to a function of type and id on successful transaction.
 
         :param delay: the amount of time to wait before sending this message.
         :param typename: the target function type name, for example: "org.apache.flink.statefun/greeter"
         :param id: the id of the target function
         :param message: the message to send
-        :param success: whether to send this message on success or failure
         """
         if not message:
             raise ValueError("missing message")
         any = Any()
         any.Pack(message)
-        self.send_after(delay, typename, id, any, success)
+        self.send_after_on_success(delay, typename, id, any)
 
-    def send_egress(self, typename, message: Any, success: bool):
+    def send_egress_on_success(self, typename, message: Any):
         """
-        Sends a message to an egress defined by @typename
+        Sends a message to an egress defined by @typename on successful transaction
         :param typename: an egress identifier of the form <namespace>/<name>
         :param message: the message to send.
         """
@@ -388,30 +331,271 @@ class TwoPhaseCommitBatchContext(object):
             raise ValueError("missing type name")
         if not message:
             raise ValueError("missing message")
-        if success:
-            self.egresses_on_success.append((typename, message))
+        if 'egress_messages' in self.success_response:
+            self.success_response['egress_messages'].append((typename, message))
         else:
-            self.egresses_on_failure.append((typename, message))
+            self.success_response['egress_messages'] = [(typename, message)]
 
-    def pack_and_send_egress(self, typename, message, success: bool):
+    def pack_and_send_egress_on_success(self, typename, message):
         """
-        Sends a message to an egress defined by @typename
+        Sends a message to an egress defined by @typename on successful transaction
         :param typename: an egress identifier of the form <namespace>/<name>
         :param message: the message to send.
-        :param success: whether to send this message on success or failure
         """
         if not message:
             raise ValueError("missing message")
         any = Any()
         any.Pack(message)
-        self.send_egress(typename, any, success)
+        self.send_egress_on_success(typename, any)
 
-    # --------------------------------------------------------------------------------------
-    # failure status for atomic messages
-    # --------------------------------------------------------------------------------------
-    def set_failed(self, failed_status):
+    def send_on_failure(self, typename: str, id: str, message: Any):
         """
-        Sets the fail attribute of the context to allow for atomic functions.
-        :param failed_status: true for a failed invocation otherwise false
+        Send a message to a function of type and id on failed transaction.
+
+        :param typename: the target function type name, for example: "org.apache.flink.statefun/greeter"
+        :param id: the id of the target function
+        :param message: the message to send
         """
-        self.failed = failed_status
+
+        if not typename:
+            raise ValueError("missing type name")
+        if not id:
+            raise ValueError("missing id")
+        if not message:
+            raise ValueError("missing message")
+        out = (typename, id, message)
+        if 'messages' in self.failure_response:
+            self.failure_response['messages'].append(out)
+        else:
+            self.failure_response['messages'] = [out]
+
+    def pack_and_send_on_failure(self, typename: str, id: str, message):
+        """
+        Send a Protobuf message to a function on failed transaction.
+
+        This variant of send, would first pack this message
+        into a google.protobuf.Any and then send it.
+
+        :param typename: the target function type name, for example: "org.apache.flink.statefun/greeter"
+        :param id: the id of the target function
+        :param message: the message to pack into an Any and the send.
+        """
+        if not message:
+            raise ValueError("missing message")
+        any = Any()
+        any.Pack(message)
+        self.send_on_failure(typename, id, any)
+
+    def reply_on_failure(self, message: Any):
+        """
+        Reply to the sender (assuming there is a sender) on failed transaction
+
+        :param message: the message to reply to.
+        """
+        caller = self.caller
+        if not caller:
+            raise AssertionError(
+                "Unable to reply without a caller. Was this message was sent directly from an ingress?")
+        self.send_on_failure(caller.typename(), caller.identity, message)
+
+    def pack_and_reply_on_failure(self, message):
+        """
+        Reply to the sender (assuming there is a sender) if failed transaction.
+
+        :param message: the message to reply to.
+        """
+        any = Any()
+        any.Pack(message)
+        self.reply_on_failure(any)
+
+    def send_after_on_failure(self, delay: timedelta, typename: str, id: str, message: Any):
+        """
+        Send a message to a function of type and id after a delay, on failure.
+
+        :param delay: the amount of time to wait before sending this message.
+        :param typename: the target function type name, for example: "org.apache.flink.statefun/greeter"
+        :param id: the id of the target function
+        :param message: the message to send
+        """
+        if not delay:
+            raise ValueError("missing delay")
+        if not typename:
+            raise ValueError("missing type name")
+        if not id:
+            raise ValueError("missing id")
+        if not message:
+            raise ValueError("missing message")
+        duration_ms = int(delay.total_seconds() * 1000.0)
+        out = (duration_ms, typename, id, message)
+        if 'delayed_messages' in self.failure_response:
+            self.failure_response['delayed_messages'].append(out)
+        else:
+            self.failure_response['delayed_messages'] = [out]
+
+    def pack_and_send_after_on_failure(self, delay: timedelta, typename: str, id: str, message):
+        """
+        Send a message to a function of type and id on failed transaction.
+
+        :param delay: the amount of time to wait before sending this message.
+        :param typename: the target function type name, for example: "org.apache.flink.statefun/greeter"
+        :param id: the id of the target function
+        :param message: the message to send
+        """
+        if not message:
+            raise ValueError("missing message")
+        any = Any()
+        any.Pack(message)
+        self.send_after_on_failure(delay, typename, id, any)
+
+    def send_egress_on_failure(self, typename, message: Any):
+        """
+        Sends a message to an egress defined by @typename on failed transaction
+        :param typename: an egress identifier of the form <namespace>/<name>
+        :param message: the message to send.
+        """
+        if not typename:
+            raise ValueError("missing type name")
+        if not message:
+            raise ValueError("missing message")
+        if 'egress_messages' in self.failure_response:
+            self.failure_response['egress_messages'].append((typename, message))
+        else:
+            self.failure_response['egress_messages'] = [(typename, message)]
+
+    def pack_and_send_egress_on_failure(self, typename, message):
+        """
+        Sends a message to an egress defined by @typename on failed transaction
+        :param typename: an egress identifier of the form <namespace>/<name>
+        :param message: the message to send.
+        """
+        if not message:
+            raise ValueError("missing message")
+        any = Any()
+        any.Pack(message)
+        self.send_egress_on_failure(typename, any)
+
+    def send_on_retryable(self, typename: str, id: str, message: Any):
+        """
+        Send a message to a function of type and id on retryable transaction.
+
+        :param typename: the target function type name, for example: "org.apache.flink.statefun/greeter"
+        :param id: the id of the target function
+        :param message: the message to send
+        """
+
+        if not typename:
+            raise ValueError("missing type name")
+        if not id:
+            raise ValueError("missing id")
+        if not message:
+            raise ValueError("missing message")
+        out = (typename, id, message)
+        if 'messages' in self.retryable_response:
+            self.retryable_response['messages'].append(out)
+        else:
+            self.retryable_response['messages'] = [out]
+
+    def pack_and_send_on_retryable(self, typename: str, id: str, message):
+        """
+        Send a Protobuf message to a function on retryable transaction.
+
+        This variant of send, would first pack this message
+        into a google.protobuf.Any and then send it.
+
+        :param typename: the target function type name, for example: "org.apache.flink.statefun/greeter"
+        :param id: the id of the target function
+        :param message: the message to pack into an Any and the send.
+        """
+        if not message:
+            raise ValueError("missing message")
+        any = Any()
+        any.Pack(message)
+        self.send_on_retryable(typename, id, any)
+
+    def reply_on_retryable(self, message: Any):
+        """
+        Reply to the sender (assuming there is a sender) on retryable transaction
+
+        :param message: the message to reply to.
+        """
+        caller = self.caller
+        if not caller:
+            raise AssertionError(
+                "Unable to reply without a caller. Was this message was sent directly from an ingress?")
+        self.send_on_retryable(caller.typename(), caller.identity, message)
+
+    def pack_and_reply_on_retryable(self, message):
+        """
+        Reply to the sender (assuming there is a sender) if failed transaction.
+
+        :param message: the message to reply to.
+        """
+        any = Any()
+        any.Pack(message)
+        self.reply_on_retryable(any)
+
+    def send_after_on_retryable(self, delay: timedelta, typename: str, id: str, message: Any):
+        """
+        Send a message to a function of type and id after a delay, on retryable transaction.
+
+        :param delay: the amount of time to wait before sending this message.
+        :param typename: the target function type name, for example: "org.apache.flink.statefun/greeter"
+        :param id: the id of the target function
+        :param message: the message to send
+        """
+        if not delay:
+            raise ValueError("missing delay")
+        if not typename:
+            raise ValueError("missing type name")
+        if not id:
+            raise ValueError("missing id")
+        if not message:
+            raise ValueError("missing message")
+        duration_ms = int(delay.total_seconds() * 1000.0)
+        out = (duration_ms, typename, id, message)
+        if 'delayed_messages' in self.retryable_response:
+            self.retryable_response['delayed_messages'].append(out)
+        else:
+            self.retryable_response['delayed_messages'] = [out]
+
+    def pack_and_send_after_on_retryable(self, delay: timedelta, typename: str, id: str, message):
+        """
+        Send a message to a function of type and id on retryable transaction.
+
+        :param delay: the amount of time to wait before sending this message.
+        :param typename: the target function type name, for example: "org.apache.flink.statefun/greeter"
+        :param id: the id of the target function
+        :param message: the message to send
+        """
+        if not message:
+            raise ValueError("missing message")
+        any = Any()
+        any.Pack(message)
+        self.send_after_on_retryable(delay, typename, id, any)
+
+    def send_egress_on_retryable(self, typename, message: Any):
+        """
+        Sends a message to an egress defined by @typename on retryable transaction
+        :param typename: an egress identifier of the form <namespace>/<name>
+        :param message: the message to send.
+        """
+        if not typename:
+            raise ValueError("missing type name")
+        if not message:
+            raise ValueError("missing message")
+        if 'egress_messages' in self.retryable_response:
+            self.retryable_response['egress_messages'].append((typename, message))
+        else:
+            self.retryable_response['egress_messages'] = [(typename, message)]
+
+    def pack_and_send_egress_on_retryable(self, typename, message):
+        """
+        Sends a message to an egress defined by @typename on retryable transaction
+        :param typename: an egress identifier of the form <namespace>/<name>
+        :param message: the message to send.
+        """
+        if not message:
+            raise ValueError("missing message")
+        any = Any()
+        any.Pack(message)
+        self.send_egress_on_retryable(typename, any)
