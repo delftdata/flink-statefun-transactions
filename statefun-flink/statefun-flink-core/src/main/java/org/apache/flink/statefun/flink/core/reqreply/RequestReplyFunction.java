@@ -126,7 +126,7 @@ public final class RequestReplyFunction implements StatefulFunction {
   }
 
   private void onRegularRequest(InternalContext context, Any message) {
-    LOGGER.info("Received regular invocation to function: " + context.self().type().toString());
+    // LOGGER.info("Received regular invocation to function: " + context.self().type().toString());
     Invocation.Builder invocationBuilder = singeInvocationBuilder(context, message);
     if (requestState.getOrDefault(-1) < 0 && !locked.getOrDefault(false)) {
       // no inflight requests, and nothing in the batch.
@@ -134,7 +134,7 @@ public final class RequestReplyFunction implements StatefulFunction {
       // a) there is a request in flight.
       // b) there is nothing in the batch.
       requestState.set(0);
-      LOGGER.info("Sending out regular invocation to function: " + context.self().type().toString());
+      // LOGGER.info("Sending out regular invocation to function: " + context.self().type().toString());
       sendToFunction(context, invocationBuilder);
       return;
     }
@@ -150,13 +150,13 @@ public final class RequestReplyFunction implements StatefulFunction {
     if (transactionId.getOrDefault("-").equals(context.getTransactionId())
             && locked.getOrDefault(false)) {
       if (context.getTransactionMessage().equals(Context.TransactionMessage.ABORT)) {
-        LOGGER.info("Received transaction abort invocation for remote function: " + context.self().type().toString());
+        // LOGGER.info("Received transaction abort invocation for remote function: " + context.self().type().toString());
         cleanUpAfterTransaction();
         if (!tpcInFlight.getOrDefault(false)) {
           continueProcessingBatchedRequests(context);
         }
       } else if (context.getTransactionMessage().equals(Context.TransactionMessage.COMMIT)) {
-        LOGGER.info("Received transaction commit invocation for remote function: " + context.self().type().toString());
+        // LOGGER.info("Received transaction commit invocation for remote function: " + context.self().type().toString());
         InvocationResponse response = transactionResult.get();
         cleanUpAfterTransaction();
         if (response != null) {
@@ -164,11 +164,11 @@ public final class RequestReplyFunction implements StatefulFunction {
         }
         continueProcessingBatchedRequests(context);
       } else if (context.getTransactionMessage().equals(Context.TransactionMessage.PREPARE)) {
-        LOGGER.info("Received transaction prepare invocation for (READ_LOCKED) remote function: " + context.self().type().toString());
+        // LOGGER.info("Received transaction prepare invocation for (READ_LOCKED) remote function: " + context.self().type().toString());
         // Continuing from read locked transaction
         startTpcTransaction(context, invocationBuilder, context.getTransactionId());
       } else {
-        LOGGER.info("Received unexpected message for current transaction ID for remote function: " + context.self().type().toString());
+        // LOGGER.info("Received unexpected message for current transaction ID for remote function: " + context.self().type().toString());
       }
       return;
     }
@@ -181,7 +181,7 @@ public final class RequestReplyFunction implements StatefulFunction {
 
     // Handle new SAGAs invocation
     if (context.getTransactionMessage().equals(Context.TransactionMessage.SAGAS)) {
-      LOGGER.info("Received SAGAs invocation for remote function: " + context.self().type().toString());
+      // LOGGER.info("Received SAGAs invocation for remote function: " + context.self().type().toString());
       if (requestState.getOrDefault(-1) < 0 && !locked.getOrDefault(false)) {
         startSagasTransaction(context, invocationBuilder, context.getTransactionId());
       } else {
@@ -192,7 +192,7 @@ public final class RequestReplyFunction implements StatefulFunction {
 
     // Handle new transaction prepare
     if (context.getTransactionMessage().equals(Context.TransactionMessage.PREPARE)) {
-      LOGGER.info("Received transaction prepare invocation for remote function: " + context.self().type().toString());
+      // LOGGER.info("Received transaction prepare invocation for remote function: " + context.self().type().toString());
       if (requestState.getOrDefault(-1) < 0 && !locked.getOrDefault(false)) {
         startTpcTransaction(context, invocationBuilder, context.getTransactionId());
       } else {
@@ -210,7 +210,7 @@ public final class RequestReplyFunction implements StatefulFunction {
       }
     }
 
-    LOGGER.info("Received UNEXPECTED transaction invocation for remote function: " + context.self().type().toString());
+    // LOGGER.info("Received UNEXPECTED transaction invocation for remote function: " + context.self().type().toString());
   }
 
   private void removeTpcInvocationFromQueueIfQueued(InternalContext context) {
@@ -223,7 +223,7 @@ public final class RequestReplyFunction implements StatefulFunction {
         batch.set(batchList);
         context.functionTypeMetrics().consumeBacklogMessages(1);
         requestState.set(requestState.get() - 1);
-        LOGGER.info("Removed transaction from the queue: " + context.self().type().toString());
+        // LOGGER.info("Removed transaction from the queue: " + context.self().type().toString());
         break;
       }
     }
@@ -268,13 +268,13 @@ public final class RequestReplyFunction implements StatefulFunction {
     requestState.set(inflightOrBatched);
     context.functionTypeMetrics().appendBacklogMessages(1);
     if (isMaxNumBatchRequestsExceeded(inflightOrBatched)) {
-      LOGGER.info("Function is locked due to maxNumBatchRequests: " + context.self().type().toString());
+      // LOGGER.info("Function is locked due to maxNumBatchRequests: " + context.self().type().toString());
       context.awaitAsyncOperationComplete();
     }
   }
 
   private void startSagasTransaction(InternalContext context, Invocation.Builder invocationBuilder, String id) {
-    LOGGER.info("Sending out SAGAS - transaction invocation to function: " + context.self().type().toString());
+    // LOGGER.info("Sending out SAGAS - transaction invocation to function: " + context.self().type().toString());
     requestState.set(0);
     sagasInFlight.set(true);
     transactionId.set(id);
@@ -283,7 +283,7 @@ public final class RequestReplyFunction implements StatefulFunction {
   }
 
   private void startTpcTransaction(InternalContext context, Invocation.Builder invocationBuilder, String id) {
-    LOGGER.info("Sending out TPC - transaction invocation to function: " + context.self().type().toString());
+    // LOGGER.info("Sending out TPC - transaction invocation to function: " + context.self().type().toString());
     requestState.set(0);
     tpcInFlight.set(true);
     locked.set(true);
@@ -322,13 +322,13 @@ public final class RequestReplyFunction implements StatefulFunction {
     if (tpcInFlight.getOrDefault(false)) {
       tpcInFlight.clear();
       if (locked.getOrDefault(false)) {
-        LOGGER.info("Received async result invocation for LOCKED (CURRENT) TRANSACTION: " +
-                context.self().type().toString());
+        // LOGGER.info("Received async result invocation for LOCKED (CURRENT) TRANSACTION: " +
+        //         context.self().type().toString());
         transactionResult.set(invocationResult);
         replyToTransactionFunction(context, invocationResult);
       } else {
-        LOGGER.info("Received async result invocation for UNLOCKED (/OLD) TRANSACTION: " +
-                context.self().type().toString());
+        // LOGGER.info("Received async result invocation for UNLOCKED (/OLD) TRANSACTION: " +
+        //         context.self().type().toString());
         continueProcessingBatchedRequests(context);
       }
       return;
@@ -337,7 +337,7 @@ public final class RequestReplyFunction implements StatefulFunction {
     // Handle response of outgoing SAGAS invocation
     if (sagasInFlight.getOrDefault(false)) {
       sagasInFlight.clear();
-      LOGGER.info("Received async SAGAS result for function: " + context.self().type().toString());
+      // LOGGER.info("Received async SAGAS result for function: " + context.self().type().toString());
       replyToTransactionFunction(context, invocationResult);
       cleanUpAfterTransaction();
       // If successful
@@ -369,12 +369,12 @@ public final class RequestReplyFunction implements StatefulFunction {
 
     // Handle unexpected response when function is locked
     if (locked.getOrDefault(false)) {
-      LOGGER.info("Received UNEXPECTED regular async result invocation: " + context.self().type().toString());
+      // LOGGER.info("Received UNEXPECTED regular async result invocation: " + context.self().type().toString());
       return;
     }
 
     // Handle regular async response
-    LOGGER.info("Received regular async result invocation: " + context.self().type().toString());
+    // LOGGER.info("Received regular async result invocation: " + context.self().type().toString());
     handleInvocationResponse(context, invocationResult);
     continueProcessingBatchedRequests(context);
   }

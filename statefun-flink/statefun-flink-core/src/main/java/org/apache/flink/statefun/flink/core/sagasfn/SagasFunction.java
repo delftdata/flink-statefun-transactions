@@ -68,7 +68,7 @@ public class SagasFunction implements StatefulFunction {
 
     @Override
     public void invoke(Context context, Object input) {
-        LOGGER.info("Received invocaiton for SAGAs function: " + context.self().type().toString());
+        // LOGGER.info("Received invocaiton for SAGAs function: " + context.self().type().toString());
         InternalContext castedContext = (InternalContext) context;
 
         if (input instanceof AsyncOperationResult) {
@@ -77,7 +77,7 @@ public class SagasFunction implements StatefulFunction {
                         (AsyncOperationResult<ToFunction, FromFunction>) input;
                 onAsyncResult(castedContext, result);
             } else {
-                LOGGER.warn("Unexpected AsyncOperation Result for function: " + context.self().type().toString());
+                // LOGGER.warn("Unexpected AsyncOperation Result for function: " + context.self().type().toString());
             }
             return;
         }
@@ -88,7 +88,7 @@ public class SagasFunction implements StatefulFunction {
                         (ResponseToTransactionFunction) input;
                 handleResponseToTransactionFunction(castedContext, responseToTransactionFunction);
             } else {
-                LOGGER.warn("Unexpected response to SAGAS function found: " + context.self().type().toString());
+                // LOGGER.warn("Unexpected response to SAGAS function found: " + context.self().type().toString());
             }
             return;
         }
@@ -139,7 +139,7 @@ public class SagasFunction implements StatefulFunction {
             InternalContext context, ResponseToTransactionFunction response) {
         if (!response.getTransactionId()
                 .equals(currentTransactionId.getOrDefault("."))) {
-            LOGGER.info("Received response to transaction for different (probably old) transaction");
+            // LOGGER.info("Received response to transaction for different (probably old) transaction");
             return;
         }
 
@@ -160,7 +160,7 @@ public class SagasFunction implements StatefulFunction {
                 for (FromFunction.SagasFunctionPair invocationPair :
                         currentTransactionResults.get().getInvocationPairsList()) {
                     if (invocationPair.getInitialMessage().getTarget().equals(caller)) {
-                        LOGGER.info("Later sending compensating message: " + context.self().type().toString());
+                        // LOGGER.info("Later sending compensating message: " + context.self().type().toString());
                         sendCompensatingMessage(context, invocationPair);
                     }
                 }
@@ -187,17 +187,17 @@ public class SagasFunction implements StatefulFunction {
     }
 
     private void handleSuccess(InternalContext context) {
-        LOGGER.info("Handling success case for SAGAS transaction: " + context.self().type().toString());
+        // LOGGER.info("Handling success case for SAGAS transaction: " + context.self().type().toString());
         handleResults(context, currentTransactionResults.get().getSuccessResponse());
     }
 
     private void handleFailure(InternalContext context) {
-        LOGGER.info("Handling failure case for SAGAS transaction: " + context.self().type().toString());
+        // LOGGER.info("Handling failure case for SAGAS transaction: " + context.self().type().toString());
         for (FromFunction.SagasFunctionPair invocationPair :
                 currentTransactionResults.get().getInvocationPairsList()) {
             int success = currentTransactionFunctions.get(invocationPair.getInitialMessage().getTarget());
             if (success == 1) {
-                LOGGER.info("Directly sending compensating message: " + context.self().type().toString());
+                // LOGGER.info("Directly sending compensating message: " + context.self().type().toString());
                 sendCompensatingMessage(context, invocationPair);
             }
         }
@@ -228,7 +228,7 @@ public class SagasFunction implements StatefulFunction {
 
         ToFunction.Invocation.Builder elem = q.remove(0);
         queue.set(q);
-        LOGGER.info("Executing next transaction from queue!");
+        // LOGGER.info("Executing next transaction from queue!");
         sendToFunction(context, elem);
     }
 
@@ -238,14 +238,10 @@ public class SagasFunction implements StatefulFunction {
             throw new IllegalStateException(
                     "Failure forwarding a message to a remote function " + self, result.throwable());
         }
-        LOGGER.info(result.toString());
         FromFunction fromFunction = result.value();
         if (fromFunction.hasSagasFunctionInvocationResult()) {
-            LOGGER.info("Found SAGAs function invocation result.");
             return fromFunction.getSagasFunctionInvocationResult();
         }
-        LOGGER.info("Did not find SAGAs function invocation result.");
-        LOGGER.info(fromFunction.toString());
         return FromFunction.SagasFunctionInvocationResponse.getDefaultInstance();
     }
 

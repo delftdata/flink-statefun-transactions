@@ -73,7 +73,7 @@ public class TpcFunction implements StatefulFunction {
 
     @Override
     public void invoke(Context context, Object input) {
-        LOGGER.info("Received invocation for transaction function: " + context.self().type().toString());
+        // LOGGER.info("Received invocation for transaction function: " + context.self().type().toString());
         InternalContext castedContext = (InternalContext) context;
 
         if (context.getTransactionMessage() != null &&
@@ -99,7 +99,7 @@ public class TpcFunction implements StatefulFunction {
             } else if (transactionInProgress.getOrDefault(false)) {
                 org.apache.flink.statefun.sdk.Address initiator = context.getAddresses().get(0);
                 if (initiator.equals(context.self())) {
-                    LOGGER.info("Found deadlock. Aborting transaction!");
+                    // LOGGER.info("Found deadlock. Aborting transaction!");
                     handleRetryable((InternalContext) context);
                     cleanUp((InternalContext) context);
                     return;
@@ -129,7 +129,7 @@ public class TpcFunction implements StatefulFunction {
                 onAsyncResult(castedContext, result);
             }
             else {
-                LOGGER.warn("Unexpected AsyncOperation Result for function: " + context.self().type().toString());
+                // LOGGER.warn("Unexpected AsyncOperation Result for function: " + context.self().type().toString());
             }
             return;
         }
@@ -140,7 +140,7 @@ public class TpcFunction implements StatefulFunction {
                         (FromFunction.ResponseToTransactionFunction) input;
                 handleResponseToTransactionFunction(castedContext, responseToTransactionFunction);
             } else {
-                LOGGER.warn("Unexpected prepare phase result received.");
+                // LOGGER.warn("Unexpected prepare phase result received.");
             }
             return;
         }
@@ -157,7 +157,7 @@ public class TpcFunction implements StatefulFunction {
                     batch.getOrDefault(new ArrayList());
 
             b.add(new ImmutableTriple(invocationBuilder, context.getTransactionId(), context.getAddresses()));
-            LOGGER.info("Add transaction request to queue.");
+            // LOGGER.info("Add transaction request to queue.");
             batch.set(b);
         }
     }
@@ -185,8 +185,8 @@ public class TpcFunction implements StatefulFunction {
     private void handleResponseToTransactionFunction(InternalContext context, FromFunction.ResponseToTransactionFunction response) {
         if (!response.getTransactionId()
                 .equals(currentTransactionId.getOrDefault("."))) {
-            LOGGER.info("Received prepare phase response for different " +
-                    "transaction (probably old).");
+            // LOGGER.info("Received prepare phase response for different " +
+            //         "transaction (probably old).");
             return;
         }
 
@@ -214,7 +214,7 @@ public class TpcFunction implements StatefulFunction {
 
     private void onAsyncResult(
             InternalContext context, AsyncOperationResult<ToFunction, FromFunction> asyncResult) {
-        LOGGER.info("Got async result for TPC!");
+        // LOGGER.info("Got async result for TPC!");
         if (asyncResult.unknown()) {
             ToFunction batch = asyncResult.metadata();
             sendToFunction(context, batch);
@@ -247,15 +247,15 @@ public class TpcFunction implements StatefulFunction {
         }
         FromFunction fromFunction = result.value();
         if (fromFunction.hasTpcFunctionInvocationResult()) {
-            LOGGER.info("Found TPC function invocation result.");
+            // LOGGER.info("Found TPC function invocation result.");
             return fromFunction.getTpcFunctionInvocationResult();
         }
-        LOGGER.info("Did not find TPC function invocation result.");
+        // LOGGER.info("Did not find TPC function invocation result.");
         return FromFunction.TpcFunctionInvocationResponse.getDefaultInstance();
     }
 
     private void handleSuccess(InternalContext context) {
-        LOGGER.info("Handling success case for this transaction.");
+        // LOGGER.info("Handling success case for this transaction.");
         for(Address address : currentTransactionFunctions.keys()) {
             final org.apache.flink.statefun.sdk.Address to = polyglotAddressToSdkAddress(address);
             final Any message = Any.pack(Payload.getDefaultInstance());
@@ -266,7 +266,7 @@ public class TpcFunction implements StatefulFunction {
     }
 
     private void handleFailure(InternalContext context) {
-        LOGGER.info("Handling failure case for this transaction.");
+        // LOGGER.info("Handling failure case for this transaction.");
         for(Address address : currentTransactionFunctions.keys()) {
             final org.apache.flink.statefun.sdk.Address to = polyglotAddressToSdkAddress(address);
             final Any message = Any.pack(Payload.getDefaultInstance());
@@ -277,7 +277,7 @@ public class TpcFunction implements StatefulFunction {
     }
 
     private void handleRetryable(InternalContext context) {
-        LOGGER.info("Handling deadlock case for this transaction.");
+        // LOGGER.info("Handling deadlock case for this transaction.");
         for(Address address : currentTransactionFunctions.keys()) {
             final org.apache.flink.statefun.sdk.Address to = polyglotAddressToSdkAddress(address);
             final Any message = Any.pack(Payload.getDefaultInstance());
@@ -309,7 +309,7 @@ public class TpcFunction implements StatefulFunction {
 
         ImmutableTriple<ToFunction.Invocation.Builder, String, List<org.apache.flink.statefun.sdk.Address>> elem = b.remove(0);
         batch.set(b);
-        LOGGER.info("Executing next transaction from queue!");
+        // LOGGER.info("Executing next transaction from queue!");
         startTransaction(context, elem.getLeft(), elem.getMiddle(), elem.getRight());
     }
 

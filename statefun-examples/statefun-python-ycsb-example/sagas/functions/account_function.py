@@ -1,5 +1,5 @@
 from statefun import StatefulFunctions
-from statefun import RequestReplyHandler
+from statefun import AsyncRequestReplyHandler
 from statefun import kafka_egress_record
 
 import typing
@@ -26,7 +26,7 @@ functions = StatefulFunctions()
 
 
 @functions.bind("ycsb-example/account_function")
-def account_function(context, request: typing.Union[Wrapper, AddCredit, SubtractCredit]):
+async def account_function(context, request: typing.Union[Wrapper, AddCredit, SubtractCredit]):
     # Get state
     state = context.state('state').unpack(State)
 
@@ -39,76 +39,76 @@ def account_function(context, request: typing.Union[Wrapper, AddCredit, Subtract
         if message.Is(Insert.DESCRIPTOR):
             insert = Insert()
             message.Unpack(insert)
-            handle_insert(context, state, insert, request_id)
+            await handle_insert(context, state, insert, request_id)
         elif message.Is(Read.DESCRIPTOR):
             read = Read()
             message.Unpack(read)
-            handle_read(context, state, read, request_id)
+            await handle_read(context, state, read, request_id)
         elif message.Is(Update.DESCRIPTOR):
             update = Update()
             message.Unpack(update)
-            handle_update(context, state, update, request_id)
+            await handle_update(context, state, update, request_id)
         else:
             raise UnknownMessageException(request_id)
     else:
         # internal messages
         if isinstance(request, AddCredit):
-            handle_add_credit(context, state, request)
+            await handle_add_credit(context, state, request)
         elif isinstance(request, SubtractCredit):
-            handle_subtract_credit(context, state, request)
+            await handle_subtract_credit(context, state, request)
         else:
             raise UnknownMessageException(request_id)
 
 
 @functions.bind_exception_handler(AlreadyExistsException)
-def handle_already_exists(context, request_id):
-    send_response(context, request_id, 400)
+async def handle_already_exists(context, request_id):
+    await send_response(context, request_id, 400)
 
 
 @functions.bind_exception_handler(NotFoundException)
-def handle_not_found(context, request_id):
-    send_response(context, request_id, 404)
+async def handle_not_found(context, request_id):
+    await send_response(context, request_id, 404)
 
 
 @functions.bind_exception_handler(UnknownMessageException)
-def handle_unkown_message(context, request_id):
-    send_response(context, request_id, 500)
+async def handle_unkown_message(context, request_id):
+    await send_response(context, request_id, 500)
 
 
 @functions.bind_exception_handler(NotEnoughCreditException)
-def handle_not_enough_credit(context, request_id):
-    send_response(context, request_id, 401)
+async def handle_not_enough_credit(context, request_id):
+    await send_response(context, request_id, 401)
 
 
-def handle_insert(context, state: State, message: Insert, request_id: str) -> None:
+async def handle_insert(context, state: State, message: Insert, request_id: str) -> None:
     if not state:
         state = State()
         state.CopyFrom(message.state)
         context.state('state').pack(state)
-        send_response(context, request_id, 200, state)
+        await send_response(context, request_id, 200, state)
     else:
         raise AlreadyExistsException(request_id)
 
 
-def handle_read(context, state: State, message: Read, request_id: str) -> None:
+async def handle_read(context, state: State, message: Read, request_id: str) -> None:
     if not state:
         raise NotFoundException(request_id)
     else:
-        send_response(context, request_id, 200, state)
+        await send_response(context, request_id, 200, state)
 
 
-def handle_update(context, state: State, message: Update, request_id: str) -> None:
+async def handle_update(context, state: State, message: Update, request_id: str) -> None:
     if not state:
         raise NotFoundException(request_id)
     else:
         for key in message.updates:
             state.fields[key] = message.updates[key]
         context.state('state').pack(state)
-        send_response(context, request_id, 200, state)
+        await send_response(context, request_id, 200, state)
 
 
 # Internal messages
-def handle_add_credit(context, state: State, message: AddCredit) -> None:
+async def handle_add_credit(context, state: State, message: AddCredit) -> None:
     if not state:
         raise NotFoundException("NA")
     else:
@@ -116,7 +116,7 @@ def handle_add_credit(context, state: State, message: AddCredit) -> None:
         context.state('state').pack(state)
 
 
-def handle_subtract_credit(context, state: State, message: SubtractCredit):
+async def handle_subtract_credit(context, state: State, message: SubtractCredit):
     if not state:
         raise NotFoundException("NA")
     else:
@@ -127,7 +127,7 @@ def handle_subtract_credit(context, state: State, message: SubtractCredit):
             raise NotEnoughCreditException("NA")
 
 
-def send_response(context, request_id: str, status_code: int, message=None):
+async def send_response(context, request_id: str, status_code: int, message=None):
     response = Response(request_id=request_id, status_code=status_code)
     if message:
         out = Any()
@@ -136,23 +136,18 @@ def send_response(context, request_id: str, status_code: int, message=None):
     egress_message = kafka_egress_record(topic="responses", key=request_id, value=response)
     context.pack_and_send_egress("ycsb-example/kafka-egress", egress_message)
 
+from aiohttp import web
 
-handler = RequestReplyHandler(functions)
-
-from flask import request
-from flask import make_response
-from flask import Flask
-
-app = Flask(__name__)
+handler = AsyncRequestReplyHandler(functions)
 
 
-@app.route('/statefun', methods=['POST'])
-def handle():
-    response_data = handler(request.data)
-    response = make_response(response_data)
-    response.headers.set('Content-Type', 'application/octet-stream')
-    return response
+async def handle(request):
+    req = await request.read()
+    res = await handler(req)
+    return web.Response(body=res, content_type="application/octet-stream")
 
+app = web.Application()
+app.add_routes([web.post('/statefun', handle)])
 
-if __name__ == "__main__":
-    app.run()
+if __name__ == '__main__':
+    web.run_app(app, port=80)

@@ -4,6 +4,7 @@ RUN mkdir -p /app
 WORKDIR /app
 
 COPY functions/requirements.txt /app
+RUN python -m pip install --upgrade setuptools pip wheel
 RUN pip install -r requirements.txt
 
 COPY functions/account_function.py /app

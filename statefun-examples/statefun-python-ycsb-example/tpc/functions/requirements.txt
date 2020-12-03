@@ -1,3 +1,11 @@
-flask
-gunicorn
-protobuf
+aiohttp==3.7.3
+async-timeout==3.0.1
+attrs==20.3.0
+chardet==3.0.4
+gunicorn==20.0.4
+idna==2.10
+multidict==5.0.2
+protobuf==3.14.0
+six==1.15.0
+typing-extensions==3.7.4.3
+yarl==1.6.3

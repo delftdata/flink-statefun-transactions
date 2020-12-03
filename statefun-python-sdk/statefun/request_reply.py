@@ -210,15 +210,15 @@ class AsyncRequestReplyHandler:
                 try:
                     unpacked = target_function.unpack_any(invocation.argument)
                     if not unpacked:
-                        fun(context, invocation.argument)
+                        await fun(context, invocation.argument)
                     else:
-                        fun(context, unpacked)
+                        await fun(context, unpacked)
                 except FunctionInvocationException as e:
                     context = untouched_context
                     ic.context = context
                     fun = ic.functions.for_exception(e.__class__)
                     if fun:
-                        fun(context, e.message)
+                        await fun(context, e.message)
                     context.failed = True
             else:
                 context.add_unhandled_invocation(invocation)

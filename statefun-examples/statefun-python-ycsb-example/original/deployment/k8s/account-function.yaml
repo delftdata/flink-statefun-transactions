@@ -18,13 +18,13 @@ spec:
           image: martijndeh/extended-statefun-ycsb-original-account
           ports:
             - containerPort: 80
-          resources:
-            requests:
-              memory: "0.25Gi"
-              cpu: "100m"
-            limits:
-              memory: "0.25Gi"
-              cpu: "100m"
+          # resources:
+          #   requests:
+          #     memory: "0.25Gi"
+          #     cpu: "100m"
+          #   limits:
+          #     memory: "0.25Gi"
+          #     cpu: "100m"
 ---
 apiVersion: v1
 kind: Service
