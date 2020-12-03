@@ -1,0 +1,5 @@
+FROM thesis-flink-statefun:latest
+
+RUN mkdir -p /opt/statefun/modules/test
+
+COPY module.yaml /opt/statefun/modules/test/
