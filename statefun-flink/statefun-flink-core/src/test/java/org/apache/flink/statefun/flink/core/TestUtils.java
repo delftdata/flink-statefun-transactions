@@ -30,6 +30,7 @@ import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction;
 import org.apache.flink.statefun.flink.core.reqreply.RequestReplyClient;
 import org.apache.flink.statefun.flink.core.reqreply.ToFunctionRequestSummary;
 import org.apache.flink.statefun.sdk.Address;
+import org.apache.flink.statefun.sdk.Context;
 import org.apache.flink.statefun.sdk.FunctionType;
 import org.apache.flink.statefun.sdk.io.EgressIdentifier;
 
@@ -50,6 +51,8 @@ public class TestUtils {
   public static final FunctionType FUNCTION_TYPE = new FunctionType("test", "a");
   public static final Address FUNCTION_1_ADDR = new Address(FUNCTION_TYPE, "a-1");
   public static final Address FUNCTION_2_ADDR = new Address(FUNCTION_TYPE, "a-2");
+  public static final Address FUNCTION_3_ADDR = new Address(FUNCTION_TYPE, "a-3");
+
   public static final EnvelopeAddress DUMMY_PAYLOAD =
       EnvelopeAddress.newBuilder().setNamespace("com.foo").setType("greet").setId("user-1").build();
 
@@ -73,11 +76,11 @@ public class TestUtils {
     }
 
     /** return the n-th invocation sent as part of the current batch. */
-    ToFunction.Invocation capturedInvocation(int n) {
+    public ToFunction.Invocation capturedInvocation(int n) {
       return wasSentToFunction.getInvocation().getInvocations(n);
     }
 
-    ByteString capturedState(int n) {
+    public ByteString capturedState(int n) {
       return wasSentToFunction.getInvocation().getState(n).getStateValue();
     }
 
@@ -121,6 +124,10 @@ public class TestUtils {
       return fakeMetrics;
     }
 
+    public int numBacklog() {
+      return fakeMetrics.numBacklog;
+    }
+
     @Override
     public Address self() {
       final FunctionType FN_TYPE = new FunctionType("foo", "bar");
@@ -130,6 +137,36 @@ public class TestUtils {
     @Override
     public Address caller() {
       return caller;
+    }
+
+    public void setSagas(String id, Address caller) {
+      setTransactionId(id);
+      setCaller(caller);
+      setTransactionMessage(Context.TransactionMessage.SAGAS);
+    }
+
+    public void setTpcPrepare(String id, Address caller) {
+      setTransactionId(id);
+      setCaller(caller);
+      setTransactionMessage(Context.TransactionMessage.PREPARE);
+    }
+
+    public void setTpcCommit(String id, Address caller) {
+      setTransactionId(id);
+      setCaller(caller);
+      setTransactionMessage(Context.TransactionMessage.COMMIT);
+    }
+
+    public void setTpcAbort(String id, Address caller) {
+      setTransactionId(id);
+      setCaller(caller);
+      setTransactionMessage(Context.TransactionMessage.ABORT);
+    }
+
+    public void clearTransaction() {
+      setTransactionId(null);
+      setCaller(null);
+      setTransactionMessage(null);
     }
 
     public void setTransactionMessage(TransactionMessage t) {
@@ -169,9 +206,14 @@ public class TestUtils {
       return caller;
     }
 
-    public boolean isNeedsWaiting() {
+    public boolean getNeedsWaiting() {
       return needsWaiting;
     }
+
+    public void setNeedsWaiting(boolean bool) {
+      needsWaiting = bool;
+    }
+
 
     public List<Map.Entry<EgressIdentifier<?>, ?>> getEgresses() {
       return egresses;
@@ -199,11 +241,6 @@ public class TestUtils {
     public void sendTransactionMessage(Address to, Object message, String id, TransactionMessage transactionMessage) {
       tpcMessagesSent.add(new AbstractMap.SimpleImmutableEntry<>(to, message));
       transactionId = id;
-    }
-
-    @Override
-    public void sendTransactionReadMessage(Address to, Object message, String transactionId, List<Address> addresses) {
-
     }
 
     @Override
@@ -238,10 +275,6 @@ public class TestUtils {
   private static final class BacklogTrackingMetrics implements FunctionTypeMetrics {
 
     private int numBacklog = 0;
-
-    public int numBacklog() {
-      return numBacklog;
-    }
 
     @Override
     public void appendBacklogMessages(int count) {

@@ -102,11 +102,6 @@ class TestContext implements Context {
   }
 
   @Override
-  public void sendTransactionReadMessage(Address to, Object message, String transactionId, List<Address> addresses) {
-
-  }
-
-  @Override
   public void sendDeadlockDetectionProbe(Address to, Address initiator) {
 
   }

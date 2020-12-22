@@ -76,6 +76,27 @@ message ToFunction {
     oneof request {
         InvocationBatchRequest invocation = 100;
     }
+
+    message BatchDetailsList {
+        repeated BatchDetails batches = 1;
+    }
+
+    message BatchDetails {
+        enum BatchType {
+            TPC = 0;
+            REGULAR = 1;
+        }
+        BatchType batch_type = 1;
+        repeated Invocation invocations = 2;
+        repeated TransactionDetails transaction_details = 3;
+    }
+
+    message TransactionDetails {
+        int32 index = 1;
+        Address coordinator_address = 2;
+        string transaction_id = 3;
+    }
+
 }
 
 // -------------------------------------------------------------------------------------------------------------------
@@ -135,10 +156,8 @@ message FromFunction {
         repeated Invocation outgoing_messages = 2;
         repeated DelayedInvocation delayed_invocations = 3;
         repeated EgressMessage outgoing_egresses = 4;
-        bool failed = 5;
-        Invocation outgoing_message_to_transaction = 6;
-        repeated Invocation unhandled_invocations = 7;
-    } 
+        repeated bool failed = 5;
+    }
 
     message TpcFunctionInvocationResponse {
         repeated Invocation atomic_invocations = 1;
@@ -163,11 +182,5 @@ message FromFunction {
         TpcFunctionInvocationResponse tpc_function_invocation_result = 101;
         SagasFunctionInvocationResponse sagas_function_invocation_result = 102;
     }
-
-    message ResponseToTransactionFunction {
-        bool success = 1;
-        string transaction_id = 2;
-    }
 }
-
 

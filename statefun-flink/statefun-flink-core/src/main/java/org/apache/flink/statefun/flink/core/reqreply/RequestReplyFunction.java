@@ -24,26 +24,25 @@ import static org.apache.flink.statefun.flink.core.common.PolyglotUtil.sdkAddres
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.ImmutableTriple;
 import org.apache.flink.statefun.flink.core.backpressure.InternalContext;
-import org.apache.flink.statefun.flink.core.generated.Payload;
+import org.apache.flink.statefun.flink.core.generated.ResponseToTransactionFunction;
 import org.apache.flink.statefun.flink.core.metrics.RemoteInvocationMetrics;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.EgressMessage;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.InvocationResponse;
 import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction;
+import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction.BatchDetails;
+import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction.BatchDetailsList;
+import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction.TransactionDetails;
 import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction.Invocation;
 import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction.InvocationBatchRequest;
 import org.apache.flink.statefun.sdk.*;
 import org.apache.flink.statefun.sdk.annotations.Persisted;
 import org.apache.flink.statefun.sdk.io.EgressIdentifier;
+import org.apache.flink.statefun.sdk.state.PersistedAppendingBuffer;
 import org.apache.flink.statefun.sdk.state.PersistedValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -76,28 +75,19 @@ public final class RequestReplyFunction implements StatefulFunction {
   private final PersistedValue<Boolean> sagasInFlight =
           PersistedValue.of("sagas-in-flight", Boolean.class);
   @Persisted
-  private final PersistedValue<Boolean> transactionReadInFlight =
-          PersistedValue.of("transaction-read-in-flight", Boolean.class);
+  private final PersistedAppendingBuffer<TransactionDetails> transactionDetailsInFlight =
+          PersistedAppendingBuffer.of("transaction-details-in-flight", TransactionDetails.class);
   @Persisted
-  private final PersistedValue<List> batch =
-      PersistedValue.of("batch", List.class);
+  private final PersistedValue<BatchDetailsList> batches =
+      PersistedValue.of("batches", BatchDetailsList.class);
   @Persisted
   private final PersistedRemoteFunctionValues managedStates;
   @Persisted
   private final PersistedValue<Boolean> locked =
           PersistedValue.of("locked", Boolean.class);
   @Persisted
-  private final PersistedValue<Address> transactionResponseAddress =
-          PersistedValue.of("transaction-response-address", Address.class);
-  @Persisted
-  private final PersistedValue<String> transactionId =
-          PersistedValue.of("transaction-id", String.class);
-  @Persisted
-  private final PersistedValue<FromFunction.InvocationResponse> transactionResult =
+  private final PersistedValue<FromFunction.InvocationResponse> tpcTransactionResult =
           PersistedValue.of("transaction-result", FromFunction.InvocationResponse.class);
-  @Persisted
-  private final PersistedValue<List> previousAddresses =
-          PersistedValue.of("previous-addresses", List.class);
 
   public RequestReplyFunction(
       PersistedRemoteFunctionValues managedStates,
@@ -126,10 +116,9 @@ public final class RequestReplyFunction implements StatefulFunction {
   }
 
   private void onRegularRequest(InternalContext context, Any message) {
-    // LOGGER.info("Received regular invocation to function: " + context.self().type().toString());
     Invocation.Builder invocationBuilder = singeInvocationBuilder(context, message);
     if (requestState.getOrDefault(-1) < 0 && !locked.getOrDefault(false)) {
-      // no inflight requests, and nothing in the batch.
+      // no inflight requests, and nothing in the batch and no lock.
       // so we let this request to go through, and change state to indicate that:
       // a) there is a request in flight.
       // b) there is nothing in the batch.
@@ -140,35 +129,34 @@ public final class RequestReplyFunction implements StatefulFunction {
     }
     // there is at least one request in flight (inflightOrBatched >= 0),
     // so we add that request to the batch.
-    addToBatch(context, invocationBuilder);
+    addRegularInvocationToBatch(context, invocationBuilder);
   }
 
   private void onTransactionRequest(InternalContext context, Any message) {
     Invocation.Builder invocationBuilder = singeInvocationBuilder(context, message);
 
+    String currentTransactionId = null;
+    if (transactionDetailsInFlight.view().iterator().hasNext()) {
+      TransactionDetails currentTransactionDetails = transactionDetailsInFlight.view().iterator().next();
+      currentTransactionId = currentTransactionDetails.getTransactionId();
+    }
+
     // Handle active transaction
-    if (transactionId.getOrDefault("-").equals(context.getTransactionId())
-            && locked.getOrDefault(false)) {
+    if (currentTransactionId != null &&
+            context.getTransactionId().equals(currentTransactionId) &&
+            locked.getOrDefault(false)) {
       if (context.getTransactionMessage().equals(Context.TransactionMessage.ABORT)) {
-        // LOGGER.info("Received transaction abort invocation for remote function: " + context.self().type().toString());
         cleanUpAfterTransaction();
         if (!tpcInFlight.getOrDefault(false)) {
           continueProcessingBatchedRequests(context);
         }
       } else if (context.getTransactionMessage().equals(Context.TransactionMessage.COMMIT)) {
-        // LOGGER.info("Received transaction commit invocation for remote function: " + context.self().type().toString());
-        InvocationResponse response = transactionResult.get();
+        InvocationResponse response = tpcTransactionResult.get();
         cleanUpAfterTransaction();
         if (response != null) {
           handleInvocationResponse(context, response);
         }
         continueProcessingBatchedRequests(context);
-      } else if (context.getTransactionMessage().equals(Context.TransactionMessage.PREPARE)) {
-        // LOGGER.info("Received transaction prepare invocation for (READ_LOCKED) remote function: " + context.self().type().toString());
-        // Continuing from read locked transaction
-        startTpcTransaction(context, invocationBuilder, context.getTransactionId());
-      } else {
-        // LOGGER.info("Received unexpected message for current transaction ID for remote function: " + context.self().type().toString());
       }
       return;
     }
@@ -183,9 +171,15 @@ public final class RequestReplyFunction implements StatefulFunction {
     if (context.getTransactionMessage().equals(Context.TransactionMessage.SAGAS)) {
       // LOGGER.info("Received SAGAs invocation for remote function: " + context.self().type().toString());
       if (requestState.getOrDefault(-1) < 0 && !locked.getOrDefault(false)) {
-        startSagasTransaction(context, invocationBuilder, context.getTransactionId());
+        TransactionDetails transactionDetails = getTransactionDetailsBuilder(context).setIndex(0).build();
+        List<TransactionDetails> l = new ArrayList<>();
+        l.add(transactionDetails);
+        InvocationBatchRequest.Builder batchBuilder = InvocationBatchRequest.newBuilder();
+        batchBuilder.addInvocations(invocationBuilder);
+        startSagasBatch(context, batchBuilder, l);
+        requestState.set(0);
       } else {
-        addToBatch(context, invocationBuilder);
+        addSagasInvocationToBatch(context, invocationBuilder);
       }
       return;
     }
@@ -194,76 +188,101 @@ public final class RequestReplyFunction implements StatefulFunction {
     if (context.getTransactionMessage().equals(Context.TransactionMessage.PREPARE)) {
       // LOGGER.info("Received transaction prepare invocation for remote function: " + context.self().type().toString());
       if (requestState.getOrDefault(-1) < 0 && !locked.getOrDefault(false)) {
-        startTpcTransaction(context, invocationBuilder, context.getTransactionId());
+        startTpcTransaction(context, invocationBuilder.build(), getTransactionDetailsBuilder(context).build());
+        requestState.set(0);
       } else {
-        addToBatch(context, invocationBuilder);
+        addTpcInvocationToBatch(context, invocationBuilder);
       }
       return;
     }
 
-    // Handle new READ chain function invocation
-    if (context.getTransactionMessage().equals(Context.TransactionMessage.READ)) {
-      if (requestState.getOrDefault(-1) < 0 && !locked.getOrDefault(false)) {
-        startReadTransaction(context, invocationBuilder, context.getTransactionId(), context.getAddresses());
-      } else {
-        addToBatch(context, invocationBuilder);
-      }
-    }
-
-    // LOGGER.info("Received UNEXPECTED transaction invocation for remote function: " + context.self().type().toString());
+    LOGGER.info("Received UNEXPECTED transaction invocation for remote function: " + context.self().type().toString());
   }
 
   private void removeTpcInvocationFromQueueIfQueued(InternalContext context) {
-    List<ImmutablePair<ImmutableTriple<Context.TransactionMessage, String, List<Address>>,ToFunction.Invocation>> batchList =
-            batch.getOrDefault(new ArrayList());
-    for (int i = 0; i < batchList.size(); i++) {
-      ImmutablePair<ImmutableTriple<Context.TransactionMessage, String, List<Address>>,ToFunction.Invocation> current = batchList.get(i);
-      if (current.getKey().getMiddle() != null && current.getKey().getMiddle().equals(context.getTransactionId())) {
-        batchList.remove(i);
-        batch.set(batchList);
-        context.functionTypeMetrics().consumeBacklogMessages(1);
-        requestState.set(requestState.get() - 1);
-        // LOGGER.info("Removed transaction from the queue: " + context.self().type().toString());
-        break;
+    BatchDetailsList batchesList =
+            batches.getOrDefault(BatchDetailsList.getDefaultInstance());
+    for (int i = 0; i < batchesList.getBatchesCount(); i++) {
+      BatchDetails batchDetails = batchesList.getBatches(i);
+      if (batchDetails.getBatchType().equals(BatchDetails.BatchType.TPC)) {
+        if (batchDetails.getTransactionDetails(0).getTransactionId().equals(context.getTransactionId())) {
+          BatchDetailsList.Builder builder = batchesList.toBuilder();
+          builder.removeBatches(i);
+          batches.set(builder.build());
+          context.functionTypeMetrics().consumeBacklogMessages(1);
+          requestState.set(requestState.get() - 1);
+          // LOGGER.info("Removed transaction from the queue: " + context.self().type().toString());
+        }
       }
     }
   }
 
-  private void addToBatch(InternalContext context, Invocation.Builder invocationBuilder) {
-
-    int inflightOrBatched = requestState.getOrDefault(-1);
-    List<ImmutablePair> batchList = batch.getOrDefault(new ArrayList());
-
-    if (context.getTransactionMessage() != null &&
-            context.getTransactionMessage().equals(Context.TransactionMessage.PREPARE)) {
-      List<Address> blockingAddresses = new ArrayList<>();
-      if (locked.getOrDefault(false)) {
-        blockingAddresses.add(transactionResponseAddress.get());
-      }
-      for (ImmutablePair pair : batchList) {
-        ImmutableTriple triple = (ImmutableTriple) pair.left;
-        if (triple.left != null) {
-          Context.TransactionMessage message = (Context.TransactionMessage) triple.left;
-          if (message.equals(Context.TransactionMessage.PREPARE)){
-            ToFunction.Invocation blocking = (ToFunction.Invocation) pair.getRight();
-            blockingAddresses.add(polyglotAddressToSdkAddress(blocking.getCaller()));
-          }
-        }
-      }
-
-      context.sendBlockingFunctions(
-              polyglotAddressToSdkAddress(invocationBuilder.getCaller()),
-              context.getTransactionId(),
-              blockingAddresses);
+  private void addRegularInvocationToBatch(InternalContext context, Invocation.Builder invocationBuilder) {
+    BatchDetailsList batchesList =
+            batches.getOrDefault(BatchDetailsList.getDefaultInstance());
+    BatchDetailsList.Builder builder = batchesList.toBuilder();
+    if (batchesList.getBatchesCount() == 0 ||
+            batchesList.getBatches(batchesList.getBatchesCount() - 1).getBatchType().equals(BatchDetails.BatchType.TPC)) {
+      BatchDetails batchDetails = BatchDetails.newBuilder()
+              .setBatchType(BatchDetails.BatchType.REGULAR)
+              .addInvocations(invocationBuilder)
+              .build();
+      builder.addBatches(batchDetails);
+    } else {
+      int lastBatchIndex = batchesList.getBatchesCount() - 1;
+      BatchDetails.Builder batchDetails = batchesList.getBatches(lastBatchIndex).toBuilder();
+      batchDetails.addInvocations(invocationBuilder);
+      builder.setBatches(lastBatchIndex, batchDetails.build());
     }
+    batches.set(builder.build());
+    increaseNumBatched(context);
+  }
 
-    batchList.add(new ImmutablePair<>(
-            new ImmutableTriple<>(
-                    context.getTransactionMessage(),
-                    context.getTransactionId(),
-                    context.getAddresses()),
-            invocationBuilder.build()));
-    batch.set(batchList);
+  private void addSagasInvocationToBatch(InternalContext context, Invocation.Builder invocationBuilder) {
+    BatchDetailsList batchesList =
+            batches.getOrDefault(BatchDetailsList.getDefaultInstance());
+    BatchDetailsList.Builder builder = batchesList.toBuilder();
+    TransactionDetails.Builder transactionDetailsBuilder = getTransactionDetailsBuilder(context);
+    if (batchesList.getBatchesCount() == 0 ||
+            batchesList.getBatches(batchesList.getBatchesCount() - 1).getBatchType().equals(BatchDetails.BatchType.TPC)) {
+      transactionDetailsBuilder.setIndex(0);
+      BatchDetails batchDetails = BatchDetails.newBuilder()
+              .setBatchType(BatchDetails.BatchType.REGULAR)
+              .addInvocations(invocationBuilder)
+              .addTransactionDetails(transactionDetailsBuilder)
+              .build();
+      builder.addBatches(batchDetails);
+    } else {
+      int lastBatchIndex = batchesList.getBatchesCount() - 1;
+      BatchDetails.Builder batchDetails = batchesList.getBatches(lastBatchIndex).toBuilder();
+      int newInvocationIndex = batchDetails.getInvocationsCount();
+      transactionDetailsBuilder.setIndex(newInvocationIndex);
+      batchDetails
+              .addInvocations(invocationBuilder)
+              .addTransactionDetails(transactionDetailsBuilder);
+      builder.setBatches(lastBatchIndex, batchDetails.build());
+    }
+    batches.set(builder.build());
+    increaseNumBatched(context);
+  }
+
+  private void addTpcInvocationToBatch(InternalContext context, Invocation.Builder invocationBuilder) {
+    BatchDetailsList batchesList =
+            batches.getOrDefault(BatchDetailsList.getDefaultInstance());
+    BatchDetailsList.Builder builder = batchesList.toBuilder();
+    sendBlockingFunctions(context, invocationBuilder, batchesList);
+    TransactionDetails.Builder transactionDetailsBuilder = getTransactionDetailsBuilder(context);
+    BatchDetails batchDetails = BatchDetails.newBuilder()
+              .addInvocations(invocationBuilder)
+              .addTransactionDetails(transactionDetailsBuilder)
+              .build();
+    builder.addBatches(batchDetails);
+    batches.set(builder.build());
+    increaseNumBatched(context);
+  }
+
+  private void increaseNumBatched(InternalContext context) {
+    int inflightOrBatched = requestState.getOrDefault(-1);
     inflightOrBatched++;
     requestState.set(inflightOrBatched);
     context.functionTypeMetrics().appendBacklogMessages(1);
@@ -273,39 +292,48 @@ public final class RequestReplyFunction implements StatefulFunction {
     }
   }
 
-  private void startSagasTransaction(InternalContext context, Invocation.Builder invocationBuilder, String id) {
-    // LOGGER.info("Sending out SAGAS - transaction invocation to function: " + context.self().type().toString());
-    requestState.set(0);
-    sagasInFlight.set(true);
-    transactionId.set(id);
-    transactionResponseAddress.set(polyglotAddressToSdkAddress(invocationBuilder.getCaller()));
-    sendToFunction(context, invocationBuilder);
+  private void sendBlockingFunctions(InternalContext context, Invocation.Builder invocationBuilder,
+                                     BatchDetailsList batchDetailsList) {
+    List<Address> blockingAddresses = new ArrayList<>();
+    if (locked.getOrDefault(false)) {
+      Address address = polyglotAddressToSdkAddress(
+              transactionDetailsInFlight.view().iterator().next().getCoordinatorAddress());
+      blockingAddresses.add(address);
+    }
+    for (BatchDetails currBatchDetails : batchDetailsList.getBatchesList()) {
+      if (currBatchDetails.getBatchType().equals(BatchDetails.BatchType.TPC)) {
+        Address address = polyglotAddressToSdkAddress(
+                currBatchDetails.getTransactionDetails(0).getCoordinatorAddress());
+        blockingAddresses.add(address);
+      }
+    }
+    context.sendBlockingFunctions(
+            polyglotAddressToSdkAddress(invocationBuilder.getCaller()),
+            context.getTransactionId(),
+            blockingAddresses);
   }
 
-  private void startTpcTransaction(InternalContext context, Invocation.Builder invocationBuilder, String id) {
+  private void startSagasBatch(InternalContext context, InvocationBatchRequest.Builder batchBuilder,
+                               List<TransactionDetails> transactionDetails) {
+//    LOGGER.info("Sending out SAGAS - transaction invocation to function: " + context.self().type().toString() + " " + context.self().id());
+    sagasInFlight.set(true);
+    transactionDetailsInFlight.appendAll(transactionDetails);
+    sendToFunction(context, batchBuilder);
+  }
+
+  private void startTpcTransaction(InternalContext context, Invocation invocation,
+                                   TransactionDetails transactionDetails) {
     // LOGGER.info("Sending out TPC - transaction invocation to function: " + context.self().type().toString());
-    requestState.set(0);
     tpcInFlight.set(true);
     locked.set(true);
-    transactionId.set(id);
-    transactionResponseAddress.set(polyglotAddressToSdkAddress(invocationBuilder.getCaller()));
-    sendToFunction(context, invocationBuilder);
-  }
-
-  private void startReadTransaction(InternalContext context, Invocation.Builder invocationBuilder, String id,
-                                    List<Address> addresses) {
-    requestState.set(0);
-    transactionReadInFlight.set(true);
-    transactionId.set(id);
-    previousAddresses.set(addresses);
-    sendToFunction(context, invocationBuilder);
+    transactionDetailsInFlight.append(transactionDetails);
+    sendToFunction(context, invocation.toBuilder());
   }
 
   private void cleanUpAfterTransaction() {
     locked.clear();
-    transactionId.clear();
-    transactionResponseAddress.clear();
-    transactionResult.clear();
+    transactionDetailsInFlight.clear();
+    tpcTransactionResult.clear();
   }
 
   private void onAsyncResult(
@@ -324,8 +352,10 @@ public final class RequestReplyFunction implements StatefulFunction {
       if (locked.getOrDefault(false)) {
         // LOGGER.info("Received async result invocation for LOCKED (CURRENT) TRANSACTION: " +
         //         context.self().type().toString());
-        transactionResult.set(invocationResult);
-        replyToTransactionFunction(context, invocationResult);
+        tpcTransactionResult.set(invocationResult);
+        TransactionDetails transactionDetails = transactionDetailsInFlight.view().iterator().next();
+        replyToTransactionFunction(context, !invocationResult.getFailed(0), transactionDetails.getTransactionId(),
+                polyglotAddressToSdkAddress(transactionDetails.getCoordinatorAddress()));
       } else {
         // LOGGER.info("Received async result invocation for UNLOCKED (/OLD) TRANSACTION: " +
         //         context.self().type().toString());
@@ -334,36 +364,19 @@ public final class RequestReplyFunction implements StatefulFunction {
       return;
     }
 
-    // Handle response of outgoing SAGAS invocation
+    // Handle response of outgoing SAGAS (batch) invocation
     if (sagasInFlight.getOrDefault(false)) {
       sagasInFlight.clear();
-      // LOGGER.info("Received async SAGAS result for function: " + context.self().type().toString());
-      replyToTransactionFunction(context, invocationResult);
+      Iterable<TransactionDetails> transactionDetailsIterable = transactionDetailsInFlight.view();
+      for (TransactionDetails currentTransactionDetails : transactionDetailsIterable) {
+        replyToTransactionFunction(context,
+                !invocationResult.getFailed(currentTransactionDetails.getIndex()),
+                currentTransactionDetails.getTransactionId(),
+                polyglotAddressToSdkAddress(currentTransactionDetails.getCoordinatorAddress()));
+      }
       cleanUpAfterTransaction();
-      // If successful
-      if (!invocationResult.getFailed()) {
-        handleInvocationResponse(context, invocationResult);
-      }
-      continueProcessingBatchedRequests(context);
-      return;
-    }
-
-    // Handle response of call of read for transaction
-    if (transactionReadInFlight.getOrDefault(false)) {
-      transactionReadInFlight.clear();
-      // In case it ends up not going to a transaction unlock the previous functions
-      if (!invocationResult.hasOutgoingMessageToTransaction() && previousAddresses.get() != null) {
-        for(Object object : previousAddresses.get()) {
-          Address address = (Address) object;
-          final org.apache.flink.statefun.sdk.Address to = address;
-          final Any message = Any.pack(Payload.getDefaultInstance());
-          context.sendTransactionMessage(to, message, transactionId.get(),
-                  Context.TransactionMessage.COMMIT);
-        }
-      }
       handleInvocationResponse(context, invocationResult);
       continueProcessingBatchedRequests(context);
-      previousAddresses.clear();
       return;
     }
 
@@ -379,64 +392,56 @@ public final class RequestReplyFunction implements StatefulFunction {
     continueProcessingBatchedRequests(context);
   }
 
-  private void replyToTransactionFunction(InternalContext context, InvocationResponse invocationResult) {
-    FromFunction.ResponseToTransactionFunction response = FromFunction.ResponseToTransactionFunction.newBuilder()
-            .setSuccess(!invocationResult.getFailed())
-            .setTransactionId(transactionId.getOrDefault("-"))
+  private void replyToTransactionFunction(InternalContext context, boolean success, String transactionId, Address address) {
+    ResponseToTransactionFunction response = ResponseToTransactionFunction.newBuilder()
+            .setSuccess(success)
+            .setTransactionId(transactionId)
             .build();
-    Address to = transactionResponseAddress.get();
-    context.send(to, response);
+    context.send(address, response);
+  }
+
+  private TransactionDetails.Builder getTransactionDetailsBuilder(InternalContext context) {
+    TransactionDetails.Builder transactionDetailsBuilder = TransactionDetails.newBuilder();
+    transactionDetailsBuilder
+            .setCoordinatorAddress(sdkAddressToPolyglotAddress(context.caller()))
+            .setTransactionId(context.getTransactionId());
+    return transactionDetailsBuilder;
   }
 
   private void continueProcessingBatchedRequests(InternalContext context) {
-    List<ImmutablePair<ImmutableTriple<Context.TransactionMessage, String, List<Address>>,ToFunction.Invocation>> batchList =
-            batch.getOrDefault(new ArrayList());
-    if (batchList.size() == 0) {
+    BatchDetailsList batchesList =
+            batches.getOrDefault(BatchDetailsList.getDefaultInstance());
+
+    if (batchesList.getBatchesCount() == 0) {
       requestState.clear();
       return;
     }
+
     if (locked.getOrDefault(false) || tpcInFlight.getOrDefault(false)
             || sagasInFlight.getOrDefault(false)) {
       return;
     }
 
-    // Finding first transaction
-    InvocationBatchRequest.Builder builder = InvocationBatchRequest.newBuilder();
-    int size = batchList.size();
-    for (int i = 0; i < size; i++) {
-      ImmutablePair<ImmutableTriple<Context.TransactionMessage, String, List<Address>>,ToFunction.Invocation> current =
-              batchList.get(0);
-      if (current.getKey().getMiddle() != null) {
-        if (i == 0) {
-          if (current.getKey().getLeft().equals(Context.TransactionMessage.SAGAS)) {
-            startSagasTransaction(context, current.getValue().toBuilder(), current.getKey().getMiddle());
-          } else if (current.getKey().getLeft().equals(Context.TransactionMessage.PREPARE)) {
-            startTpcTransaction(context, current.getValue().toBuilder(), current.getKey().getMiddle());
-          } else if (current.getKey().getLeft().equals(Context.TransactionMessage.READ)) {
-            startReadTransaction(context, current.getValue().toBuilder(), current.getKey().getMiddle(),
-                    current.getKey().getRight());
-          }
-          batchList.remove(0);
-        } else {
-          sendToFunction(context, builder);
-        }
-        batch.set(batchList);
-        requestState.set(batchList.size());
-        context.functionTypeMetrics().consumeBacklogMessages(builder.getInvocationsCount());
-        return;
-      }
-      builder.addInvocations(current.getValue());
-      batchList.remove(0);
-    }
+    BatchDetails currentBatchDetails = batchesList.getBatches(0);
 
-    // No transaction found
-    if (builder.getInvocationsCount() > 0) {
-      sendToFunction(context, builder);
-      batch.set(batchList);
-      requestState.set(batchList.size());
-      context.functionTypeMetrics().consumeBacklogMessages(builder.getInvocationsCount());
+    if (currentBatchDetails.getBatchType().equals(BatchDetails.BatchType.TPC)) {
+      startTpcTransaction(context, currentBatchDetails.getInvocations(0),
+              currentBatchDetails.getTransactionDetails(0));
     } else {
-      requestState.clear();
+      InvocationBatchRequest.Builder builder = InvocationBatchRequest.newBuilder();
+      builder.addAllInvocations(currentBatchDetails.getInvocationsList());
+      if (currentBatchDetails.getTransactionDetailsCount() > 0) {
+        startSagasBatch(context, builder, currentBatchDetails.getTransactionDetailsList());
+      } else {
+        sendToFunction(context, builder);
+      }
+    }
+    batches.set(batchesList.toBuilder().removeBatches(0).build());
+    context.functionTypeMetrics().consumeBacklogMessages(currentBatchDetails.getInvocationsCount());
+    requestState.set(requestState.get() - currentBatchDetails.getInvocationsCount());
+    if (requestState.get() < 0) {
+      requestState.set(0);
+      LOGGER.info("Some counting mistake happened");
     }
   }
 
@@ -458,50 +463,6 @@ public final class RequestReplyFunction implements StatefulFunction {
     handleOutgoingDelayedMessages(context, invocationResult);
     handleEgressMessages(context, invocationResult);
     handleStateMutations(invocationResult);
-    if (invocationResult.hasOutgoingMessageToTransaction()) {
-      handleOutgoingMessageToTransaction(context, invocationResult);
-    }
-  }
-
-  private void handleOutgoingMessageToTransaction(Context context, InvocationResponse invocationResult) {
-    FromFunction.Invocation toTransaction = invocationResult.getOutgoingMessageToTransaction();
-    final Address to = polyglotAddressToSdkAddress(toTransaction.getTarget());
-    final Any message = toTransaction.getArgument();
-    String id;
-    if (context.getTransactionId() == null) {
-      id = UUID.randomUUID().toString();
-    } else {
-      id = context.getTransactionId();
-    }
-    locked.set(true);
-    transactionId.set(id);
-    List<Address> addresses;
-    if (previousAddresses.get() != null) {
-      addresses = previousAddresses.get();
-    } else {
-      addresses = new ArrayList<>();
-    }
-    context.sendTransactionReadMessage(to, message, id, addresses);
-
-    // Handling unhandled invocations
-    if (invocationResult.getUnhandledInvocationsCount() > 0) {
-      List<ImmutablePair<ImmutableTriple<Context.TransactionMessage, String, List<Address>>,ToFunction.Invocation>>
-              nextBatch = new ArrayList<>();
-      for (FromFunction.Invocation invocation : invocationResult.getUnhandledInvocationsList()) {
-        nextBatch.add(
-                new ImmutablePair<>(
-                        new ImmutableTriple<>(
-                                null,
-                                null,
-                                null),
-                        Invocation.newBuilder()
-                                .setArgument(invocation.getArgument())
-                                .setCaller(invocation.getTarget())
-                                .build()));
-      }
-      nextBatch.addAll(batch.get());
-      batch.set(nextBatch);
-    }
   }
 
   private void handleEgressMessages(Context context, InvocationResponse invocationResult) {

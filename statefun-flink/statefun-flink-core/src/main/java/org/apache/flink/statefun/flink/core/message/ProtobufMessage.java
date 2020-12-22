@@ -102,8 +102,6 @@ final class ProtobufMessage implements Message {
         return Context.TransactionMessage.COMMIT;
       case SAGAS:
         return Context.TransactionMessage.SAGAS;
-      case READ:
-        return Context.TransactionMessage.READ;
       case BLOCKING:
         return Context.TransactionMessage.BLOCKING;
     }

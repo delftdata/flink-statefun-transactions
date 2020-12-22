@@ -60,3 +60,8 @@ message Envelope {
     TransactionMessage transaction_message = 6;
     repeated EnvelopeAddress transaction_functions = 7;
 }
+
+message ResponseToTransactionFunction {
+    bool success = 1;
+    string transaction_id = 2;
+}

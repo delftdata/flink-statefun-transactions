@@ -3,12 +3,11 @@ package org.apache.flink.statefun.flink.core.sagasfn;
 import com.google.protobuf.Any;
 import org.apache.flink.statefun.flink.core.TestUtils;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction;
+import org.apache.flink.statefun.flink.core.generated.ResponseToTransactionFunction;
 import org.apache.flink.statefun.sdk.AsyncOperationResult;
 import org.junit.Test;
 
-import static org.apache.flink.statefun.flink.core.TestUtils.FUNCTION_1_ADDR;
-import static org.apache.flink.statefun.flink.core.TestUtils.FUNCTION_2_ADDR;
-
+import static org.apache.flink.statefun.flink.core.TestUtils.*;
 import static org.apache.flink.statefun.flink.core.common.PolyglotUtil.sdkAddressToPolyglotAddress;
 import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertThat;
@@ -142,14 +141,14 @@ public class SagasFunctionTest {
         assertThat(context.getMessagesSent().size(), is(0));
     }
 
-    private FromFunction.ResponseToTransactionFunction successResponse(String id) {
-        FromFunction.ResponseToTransactionFunction successResponse = FromFunction.ResponseToTransactionFunction
+    private ResponseToTransactionFunction successResponse(String id) {
+        ResponseToTransactionFunction successResponse = ResponseToTransactionFunction
                 .newBuilder().setSuccess(true).setTransactionId(id).build();
         return successResponse;
     }
 
-    private FromFunction.ResponseToTransactionFunction failResponse(String id) {
-        FromFunction.ResponseToTransactionFunction successResponse = FromFunction.ResponseToTransactionFunction
+    private ResponseToTransactionFunction failResponse(String id) {
+        ResponseToTransactionFunction successResponse = ResponseToTransactionFunction
                 .newBuilder().setSuccess(false).setTransactionId(id).build();
         return successResponse;
     }

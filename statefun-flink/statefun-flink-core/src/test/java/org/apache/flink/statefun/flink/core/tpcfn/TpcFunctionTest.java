@@ -3,6 +3,7 @@ package org.apache.flink.statefun.flink.core.tpcfn;
 import com.google.protobuf.Any;
 import org.apache.flink.statefun.flink.core.TestUtils;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction;
+import org.apache.flink.statefun.flink.core.generated.ResponseToTransactionFunction;
 import org.apache.flink.statefun.sdk.AsyncOperationResult;
 import org.junit.Test;
 
@@ -142,14 +143,14 @@ public class TpcFunctionTest {
         assertThat(context.getMessagesSent().size(), is(0));
     }
 
-    private FromFunction.ResponseToTransactionFunction successResponse(String id) {
-        FromFunction.ResponseToTransactionFunction successResponse = FromFunction.ResponseToTransactionFunction
+    private ResponseToTransactionFunction successResponse(String id) {
+        ResponseToTransactionFunction successResponse = ResponseToTransactionFunction
                 .newBuilder().setSuccess(true).setTransactionId(id).build();
         return successResponse;
     }
 
-    private FromFunction.ResponseToTransactionFunction failResponse(String id) {
-        FromFunction.ResponseToTransactionFunction successResponse = FromFunction.ResponseToTransactionFunction
+    private ResponseToTransactionFunction failResponse(String id) {
+        ResponseToTransactionFunction successResponse = ResponseToTransactionFunction
                 .newBuilder().setSuccess(false).setTransactionId(id).build();
         return successResponse;
     }

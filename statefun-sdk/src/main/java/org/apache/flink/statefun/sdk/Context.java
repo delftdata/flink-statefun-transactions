@@ -58,7 +58,6 @@ public interface Context {
     ABORT,
     COMMIT,
     SAGAS,
-    READ,
     BLOCKING
   }
 
@@ -73,18 +72,6 @@ public interface Context {
    */
   void sendTransactionMessage(Address to, Object message, String transactionId,
                               Context.TransactionMessage transactionMessage);
-
-  /**
-   * Invokes another function as a chained call towards a TPC function locking the functions this passes.
-   * This would represent "READ" calls in relational database systems.
-   *
-   * @param to
-   * @param message
-   * @param transactionId
-   * @param addresses
-   */
-  void sendTransactionReadMessage(Address to, Object message, String transactionId,
-                                  List<Address> addresses);
 
   /**
    * Sends a deadlock detection probe to another function including the initiator.

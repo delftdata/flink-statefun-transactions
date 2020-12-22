@@ -159,8 +159,6 @@ final class SdkMessage implements Message {
         return Envelope.TransactionMessage.ABORT;
       case COMMIT:
         return Envelope.TransactionMessage.COMMIT;
-      case READ:
-        return Envelope.TransactionMessage.READ;
       case BLOCKING:
         return Envelope.TransactionMessage.BLOCKING;
       default:

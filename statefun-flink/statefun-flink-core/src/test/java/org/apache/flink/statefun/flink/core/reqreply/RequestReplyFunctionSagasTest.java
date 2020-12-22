@@ -17,7 +17,7 @@
  */
 package org.apache.flink.statefun.flink.core.reqreply;
 
-import static org.apache.flink.statefun.flink.core.TestUtils.FUNCTION_1_ADDR;
+import static org.apache.flink.statefun.flink.core.TestUtils.*;
 import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -25,36 +25,24 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
 import com.google.protobuf.Any;
-import com.google.protobuf.ByteString;
-import java.time.Duration;
-import java.util.AbstractMap.SimpleImmutableEntry;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.function.Supplier;
-import org.apache.flink.statefun.flink.core.backpressure.InternalContext;
+import java.util.*;
+
+import org.apache.flink.statefun.flink.core.TestUtils;
 import org.apache.flink.statefun.flink.core.httpfn.StateSpec;
-import org.apache.flink.statefun.flink.core.metrics.FunctionTypeMetrics;
-import org.apache.flink.statefun.flink.core.metrics.RemoteInvocationMetrics;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.InvocationResponse;
-import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction;
-import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction.Invocation;
+import org.apache.flink.statefun.flink.core.generated.ResponseToTransactionFunction;
 import org.apache.flink.statefun.sdk.Address;
 import org.apache.flink.statefun.sdk.AsyncOperationResult;
 import org.apache.flink.statefun.sdk.AsyncOperationResult.Status;
-import org.apache.flink.statefun.sdk.Context;
 import org.apache.flink.statefun.sdk.FunctionType;
-import org.apache.flink.statefun.sdk.io.EgressIdentifier;
 import org.junit.Test;
 
 public class RequestReplyFunctionSagasTest {
     private static final FunctionType FN_TYPE = new FunctionType("foo", "bar");
 
-    private final FakeClient client = new FakeClient();
-    private final FakeContext context = new FakeContext();
+    private final TestUtils.FakeClient client = new TestUtils.FakeClient();
+    private final TestUtils.FakeContext context = new TestUtils.FakeContext();
     private final PersistedRemoteFunctionValues states =
             new PersistedRemoteFunctionValues(Collections.singletonList(new StateSpec("session")));
 
@@ -65,48 +53,12 @@ public class RequestReplyFunctionSagasTest {
     public void example() {
         functionUnderTest.invoke(context, Any.getDefaultInstance());
 
-        assertTrue(client.wasSentToFunction.hasInvocation());
+        assertTrue(client.getWasSentToFunction().hasInvocation());
         assertThat(client.capturedInvocationBatchSize(), is(1));
     }
 
     @Test
-    public void sagasPrepareMessageIsNotSentWithBatchBefore() {
-        functionUnderTest.invoke(context, Any.getDefaultInstance());
-
-        // First send regular messages batch
-        functionUnderTest.invoke(context, Any.getDefaultInstance());
-        functionUnderTest.invoke(context, Any.getDefaultInstance());
-
-        // Send tpc prepare message
-        setSagasInContext("1", FUNCTION_1_ADDR);
-        functionUnderTest.invoke(context, Any.getDefaultInstance());
-        clearTpcInContext();
-
-        functionUnderTest.invoke(context, successfulAsyncOperation());
-        assertThat(client.capturedInvocationBatchSize(), is(2));
-        functionUnderTest.invoke(context, successfulAsyncOperation());
-        assertThat(client.capturedInvocationBatchSize(), is(1));
-    }
-
-    @Test
-    public void sagasPrepareMessageIsNotSentWithBatchAfter() {
-        functionUnderTest.invoke(context, Any.getDefaultInstance());
-
-        // Send tpc prepare message
-        setSagasInContext("1", FUNCTION_1_ADDR);
-        functionUnderTest.invoke(context, Any.getDefaultInstance());
-        clearTpcInContext();
-
-        // Send regular messages
-        functionUnderTest.invoke(context, Any.getDefaultInstance());
-        functionUnderTest.invoke(context, Any.getDefaultInstance());
-
-        functionUnderTest.invoke(context, successfulAsyncOperation());
-        assertThat(client.capturedInvocationBatchSize(), is(1));
-    }
-
-    @Test
-    public void sagasPrepareMessageIsNotSentWithBatchBeforeOrAfter() {
+    public void sagasInMiddleOfBatchResponseIsSentSuccess() {
         functionUnderTest.invoke(context, Any.getDefaultInstance());
 
         // Send regular messages
@@ -114,322 +66,346 @@ public class RequestReplyFunctionSagasTest {
         functionUnderTest.invoke(context, Any.getDefaultInstance());
 
         // Send tpc prepare message
-        setSagasInContext("1", FUNCTION_1_ADDR);
+        context.setSagas("1", FUNCTION_1_ADDR);
         functionUnderTest.invoke(context, Any.getDefaultInstance());
-        clearTpcInContext();
+        context.clearTransaction();
 
         // Send regular messages
         functionUnderTest.invoke(context, Any.getDefaultInstance());
         functionUnderTest.invoke(context, Any.getDefaultInstance());
 
-        functionUnderTest.invoke(context, successfulAsyncOperation());
-        functionUnderTest.invoke(context, successfulAsyncOperation());
+        functionUnderTest.invoke(context, successfulAsyncOperation(1));
+        functionUnderTest.invoke(context, successfulAsyncOperation(5));
 
-        assertThat(client.capturedInvocationBatchSize(), is(1));
+        assertThat(context.getMessagesSent().size(), is(1));
+        Map.Entry<Address, Object> messageSent = context.getMessagesSent().get(0);
+        assertEquals(messageSent.getKey(), FUNCTION_1_ADDR);
+        assertThat(messageSent.getValue(), instanceOf(ResponseToTransactionFunction.class));
+        assertTrue(((ResponseToTransactionFunction) messageSent.getValue()).getSuccess());
     }
 
     @Test
-    public void sagasBatchIsSentToFunctionAfterSagasResponse() {
+    public void sagasInMiddleOfBatchResponseIsSentFailed() {
         functionUnderTest.invoke(context, Any.getDefaultInstance());
-
-        // Send tpc prepare message
-        setSagasInContext("1", FUNCTION_1_ADDR);
-        functionUnderTest.invoke(context, Any.getDefaultInstance());
-        clearTpcInContext();
 
         // Send regular messages
         functionUnderTest.invoke(context, Any.getDefaultInstance());
         functionUnderTest.invoke(context, Any.getDefaultInstance());
 
-        functionUnderTest.invoke(context, successfulAsyncOperation());
-        functionUnderTest.invoke(context, successfulAsyncOperation());
+        // Send tpc prepare message
+        context.setSagas("1", FUNCTION_1_ADDR);
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        context.clearTransaction();
 
-        assertThat(client.capturedInvocationBatchSize(), is(2));
+        // Send regular messages
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+        functionUnderTest.invoke(context, successfulAsyncOperation(1));
+        functionUnderTest.invoke(context, successfulAsyncOperation(5, 2));
+
+        assertThat(context.getMessagesSent().size(), is(1));
+        Map.Entry<Address, Object> messageSent = context.getMessagesSent().get(0);
+        assertEquals(messageSent.getKey(), FUNCTION_1_ADDR);
+        assertThat(messageSent.getValue(), instanceOf(ResponseToTransactionFunction.class));
+        assertFalse(((ResponseToTransactionFunction) messageSent.getValue()).getSuccess());
+        assertFalse(((ResponseToTransactionFunction) messageSent.getValue()).getSuccess());
+    }
+
+    @Test
+    public void sagasInBatchResponseIsSentSuccess() {
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+        // Send tpc prepare message
+        context.setSagas("1", FUNCTION_1_ADDR);
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        context.clearTransaction();
+
+        // Send regular messages
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+        functionUnderTest.invoke(context, successfulAsyncOperation(1));
+        functionUnderTest.invoke(context, successfulAsyncOperation(3));
+
+        assertThat(context.getMessagesSent().size(), is(1));
+        Map.Entry<Address, Object> messageSent = context.getMessagesSent().get(0);
+        assertEquals(messageSent.getKey(), FUNCTION_1_ADDR);
+        assertThat(messageSent.getValue(), instanceOf(ResponseToTransactionFunction.class));
+        assertTrue(((ResponseToTransactionFunction) messageSent.getValue()).getSuccess());
+    }
+
+    @Test
+    public void sagasInBatchResponseIsSentFailed() {
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+        // Send tpc prepare message
+        context.setSagas("1", FUNCTION_1_ADDR);
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        context.clearTransaction();
+
+        // Send regular messages
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+        functionUnderTest.invoke(context, successfulAsyncOperation(1));
+        functionUnderTest.invoke(context, successfulAsyncOperation(3, 0));
+
+        assertThat(context.getMessagesSent().size(), is(1));
+        Map.Entry<Address, Object> messageSent = context.getMessagesSent().get(0);
+        assertEquals(messageSent.getKey(), FUNCTION_1_ADDR);
+        assertThat(messageSent.getValue(), instanceOf(ResponseToTransactionFunction.class));
+        assertFalse(((ResponseToTransactionFunction) messageSent.getValue()).getSuccess());
     }
 
     @Test
     public void sagasResponseMessageIsSentOnSuccess() {
         // Send sagas prepare message
-        setSagasInContext("1", FUNCTION_1_ADDR);
+        context.setSagas("1", FUNCTION_1_ADDR);
         functionUnderTest.invoke(context, Any.getDefaultInstance());
-        clearTpcInContext();
+        context.clearTransaction();
         // Successful response
-        functionUnderTest.invoke(context, successfulAsyncOperation());
+        functionUnderTest.invoke(context, successfulAsyncOperation(1));
 
-        assertThat(context.messagesSent.size(), is(1));
-        Map.Entry<Address, Object> messageSent = context.messagesSent.get(0);
+        assertThat(context.getMessagesSent().size(), is(1));
+        Map.Entry<Address, Object> messageSent = context.getMessagesSent().get(0);
         assertEquals(messageSent.getKey(), FUNCTION_1_ADDR);
-        assertThat(messageSent.getValue(), instanceOf(FromFunction.ResponseToTransactionFunction.class));
-        assertTrue(((FromFunction.ResponseToTransactionFunction) messageSent.getValue()).getSuccess());
+        assertThat(messageSent.getValue(), instanceOf(ResponseToTransactionFunction.class));
+        assertTrue(((ResponseToTransactionFunction) messageSent.getValue()).getSuccess());
     }
 
     @Test
     public void sagasResponseMessageIsSentOnFailure() {
         // Send tpc prepare message
-        setSagasInContext("1", FUNCTION_1_ADDR);
+        context.setSagas("1", FUNCTION_1_ADDR);
         functionUnderTest.invoke(context, Any.getDefaultInstance());
-        clearTpcInContext();
+        context.clearTransaction();
         // Failing response
         FromFunction fromFunction = FromFunction.getDefaultInstance().toBuilder()
                 .setInvocationResult(
                         InvocationResponse.getDefaultInstance().toBuilder()
-                                .setFailed(true)
+                                .addFailed(true)
                                 .build())
                 .build();
         functionUnderTest.invoke(context, successfulAsyncOperation(fromFunction));
 
-        assertThat(context.messagesSent.size(), is(1));
-        Map.Entry<Address, Object> messageSent = context.messagesSent.get(0);
+        assertThat(context.getMessagesSent().size(), is(1));
+        Map.Entry<Address, Object> messageSent = context.getMessagesSent().get(0);
         assertEquals(messageSent.getKey(), FUNCTION_1_ADDR);
-        assertThat(messageSent.getValue(), instanceOf(FromFunction.ResponseToTransactionFunction.class));
-        assertFalse(((FromFunction.ResponseToTransactionFunction) messageSent.getValue()).getSuccess());
+        assertThat(messageSent.getValue(), instanceOf(ResponseToTransactionFunction.class));
+        assertFalse(((ResponseToTransactionFunction) messageSent.getValue()).getSuccess());
     }
 
     @Test
     public void sagasResponseMessageIsSentForQueuedMessage() {
         functionUnderTest.invoke(context, Any.getDefaultInstance());
-        // Send tpc prepare message
-        setSagasInContext("1", FUNCTION_1_ADDR);
+        // Send sagas message
+        context.setSagas("1", FUNCTION_1_ADDR);
         functionUnderTest.invoke(context, Any.getDefaultInstance());
-        clearTpcInContext();
+        context.clearTransaction();
 
         // Successful response for original messages
-        functionUnderTest.invoke(context, successfulAsyncOperation());
+        functionUnderTest.invoke(context, successfulAsyncOperation(1));
         // Successful response for transaction message
-        functionUnderTest.invoke(context, successfulAsyncOperation());
+        functionUnderTest.invoke(context, successfulAsyncOperation(1));
 
 
-        assertThat(context.messagesSent.size(), is(1));
-        Map.Entry<Address, Object> messageSent = context.messagesSent.get(0);
+        assertThat(context.getMessagesSent().size(), is(1));
+        Map.Entry<Address, Object> messageSent = context.getMessagesSent().get(0);
         assertEquals(messageSent.getKey(), FUNCTION_1_ADDR);
-        assertThat(messageSent.getValue(), instanceOf(FromFunction.ResponseToTransactionFunction.class));
-        assertTrue(((FromFunction.ResponseToTransactionFunction) messageSent.getValue()).getSuccess());
+        assertThat(messageSent.getValue(), instanceOf(ResponseToTransactionFunction.class));
+        assertTrue(((ResponseToTransactionFunction) messageSent.getValue()).getSuccess());
     }
 
     @Test
-    public void sagasRegularRequestsFromBatch() {
+    public void correctAddressSagasResponseMessageIsSentForQueuedMessage() {
         functionUnderTest.invoke(context, Any.getDefaultInstance());
-        functionUnderTest.invoke(context, Any.getDefaultInstance());
-        setSagasInContext("1", FUNCTION_1_ADDR);
-        functionUnderTest.invoke(context, Any.getDefaultInstance());
-        clearTpcInContext();
-        functionUnderTest.invoke(context, successfulAsyncOperation());
-        functionUnderTest.invoke(context, successfulAsyncOperation());
 
-        assertThat(context.messagesSent.size(), is(0));
-        functionUnderTest.invoke(context, successfulAsyncOperation());
-        assertThat(context.messagesSent.size(), is(1));
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        // Send sagas message
+        context.setSagas("1", FUNCTION_1_ADDR);
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        context.clearTransaction();
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+        context.setSagas("2", FUNCTION_2_ADDR);
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        context.clearTransaction();
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+
+        // Successful response for original messages
+        functionUnderTest.invoke(context, successfulAsyncOperation(1));
+        // Successful response for transaction message
+        functionUnderTest.invoke(context, successfulAsyncOperation(8, 5));
+
+
+        assertThat(context.getMessagesSent().size(), is(2));
+        Map.Entry<Address, Object> firstMessageSent = context.getMessagesSent().get(0);
+        assertEquals(firstMessageSent.getKey(), FUNCTION_1_ADDR);
+        assertThat(firstMessageSent.getValue(), instanceOf(ResponseToTransactionFunction.class));
+        assertTrue(((ResponseToTransactionFunction) firstMessageSent.getValue()).getSuccess());
+        assertEquals(((ResponseToTransactionFunction) firstMessageSent.getValue()).getTransactionId(), "1");
+
+        Map.Entry<Address, Object> secondMessageSent = context.getMessagesSent().get(1);
+        assertEquals(secondMessageSent.getKey(), FUNCTION_2_ADDR);
+        assertThat(secondMessageSent.getValue(), instanceOf(ResponseToTransactionFunction.class));
+        assertFalse(((ResponseToTransactionFunction) secondMessageSent.getValue()).getSuccess());
+        assertEquals(((ResponseToTransactionFunction) secondMessageSent.getValue()).getTransactionId(), "2");
     }
 
-    private static AsyncOperationResult<Object, FromFunction> successfulAsyncOperation() {
+    @Test
+    public void correctAddressSagasResponseMessageIsSentForFirstInQueuedMessage() {
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+        // Send sagas message
+        context.setSagas("1", FUNCTION_1_ADDR);
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        context.clearTransaction();
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+        context.setSagas("2", FUNCTION_2_ADDR);
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        context.clearTransaction();
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+
+        // Successful response for original messages
+        functionUnderTest.invoke(context, successfulAsyncOperation(1));
+        // Successful response for transaction message
+        functionUnderTest.invoke(context, successfulAsyncOperation(6, 3));
+
+
+        assertThat(context.getMessagesSent().size(), is(2));
+        Map.Entry<Address, Object> firstMessageSent = context.getMessagesSent().get(0);
+        assertEquals(firstMessageSent.getKey(), FUNCTION_1_ADDR);
+        assertThat(firstMessageSent.getValue(), instanceOf(ResponseToTransactionFunction.class));
+        assertTrue(((ResponseToTransactionFunction) firstMessageSent.getValue()).getSuccess());
+        assertEquals(((ResponseToTransactionFunction) firstMessageSent.getValue()).getTransactionId(), "1");
+
+        Map.Entry<Address, Object> secondMessageSent = context.getMessagesSent().get(1);
+        assertEquals(secondMessageSent.getKey(), FUNCTION_2_ADDR);
+        assertThat(secondMessageSent.getValue(), instanceOf(ResponseToTransactionFunction.class));
+        assertFalse(((ResponseToTransactionFunction) secondMessageSent.getValue()).getSuccess());
+        assertEquals(((ResponseToTransactionFunction) secondMessageSent.getValue()).getTransactionId(), "2");
+    }
+
+    @Test
+    public void correctAddressSagasResponseMessageIsSentForSecondQueue() {
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+        // Send sagas message
+        context.setSagas("1", FUNCTION_1_ADDR);
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        context.clearTransaction();
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+        context.setSagas("2", FUNCTION_2_ADDR);
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        context.clearTransaction();
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+
+        // Successful response for original messages
+        functionUnderTest.invoke(context, successfulAsyncOperation(1));
+
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        context.setSagas("3", FUNCTION_3_ADDR);
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        context.clearTransaction();
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+        // Successful response for first queue
+        functionUnderTest.invoke(context, successfulAsyncOperation(6, 3));
+
+        // Successful response for second queue
+        functionUnderTest.invoke(context, successfulAsyncOperation(4));
+
+        assertThat(context.getMessagesSent().size(), is(3));
+        Map.Entry<Address, Object> firstMessageSent = context.getMessagesSent().get(0);
+        assertEquals(firstMessageSent.getKey(), FUNCTION_1_ADDR);
+        assertThat(firstMessageSent.getValue(), instanceOf(ResponseToTransactionFunction.class));
+        assertTrue(((ResponseToTransactionFunction) firstMessageSent.getValue()).getSuccess());
+        assertEquals(((ResponseToTransactionFunction) firstMessageSent.getValue()).getTransactionId(), "1");
+
+        Map.Entry<Address, Object> secondMessageSent = context.getMessagesSent().get(1);
+        assertEquals(secondMessageSent.getKey(), FUNCTION_2_ADDR);
+        assertThat(secondMessageSent.getValue(), instanceOf(ResponseToTransactionFunction.class));
+        assertFalse(((ResponseToTransactionFunction) secondMessageSent.getValue()).getSuccess());
+        assertEquals(((ResponseToTransactionFunction) secondMessageSent.getValue()).getTransactionId(), "2");
+
+        Map.Entry<Address, Object> thirdMessageSent = context.getMessagesSent().get(2);
+        assertEquals(thirdMessageSent.getKey(), FUNCTION_3_ADDR);
+        assertThat(thirdMessageSent.getValue(), instanceOf(ResponseToTransactionFunction.class));
+        assertTrue(((ResponseToTransactionFunction) thirdMessageSent.getValue()).getSuccess());
+        assertEquals(((ResponseToTransactionFunction) thirdMessageSent.getValue()).getTransactionId(), "3");
+    }
+
+    @Test
+    public void batchWithSagasIsSent() {
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+        // Send sagas message
+        context.setSagas("1", FUNCTION_1_ADDR);
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        context.clearTransaction();
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+        context.setSagas("2", FUNCTION_2_ADDR);
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        context.clearTransaction();
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+        functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+        // Successful response for original message
+        functionUnderTest.invoke(context, successfulAsyncOperation(1));
+
+        assertThat(client.capturedInvocationBatchSize(), is(6));
+    }
+
+    private static AsyncOperationResult<Object, FromFunction> successfulAsyncOperation(int number) {
+        FromFunction.Builder builder = FromFunction.getDefaultInstance().toBuilder();
+        InvocationResponse.Builder responseBuilder = builder.getInvocationResult().toBuilder();
+        for (int i = 0; i < number; i++) {
+            responseBuilder.addFailed(false);
+        }
+        builder.setInvocationResult(responseBuilder);
+
         return new AsyncOperationResult<>(
-                new Object(), Status.SUCCESS, FromFunction.getDefaultInstance(), null);
+                new Object(), Status.SUCCESS,
+                builder.build(),
+                null);
+    }
+
+    private static AsyncOperationResult<Object, FromFunction> successfulAsyncOperation(int number, int indexFailed) {
+        FromFunction.Builder builder = FromFunction.getDefaultInstance().toBuilder();
+        InvocationResponse.Builder responseBuilder = builder.getInvocationResult().toBuilder();
+        for (int i = 0; i < number; i++) {
+            if (i == indexFailed) {
+                responseBuilder.addFailed(true);
+            } else {
+                responseBuilder.addFailed(false);
+            }
+        }
+        builder.setInvocationResult(responseBuilder);
+
+        return new AsyncOperationResult<>(
+                new Object(), Status.SUCCESS,
+                builder.build(),
+                null);
     }
 
     private static AsyncOperationResult<Object, FromFunction> successfulAsyncOperation(
             FromFunction fromFunction) {
         return new AsyncOperationResult<>(new Object(), Status.SUCCESS, fromFunction, null);
-    }
-
-    private void setSagasInContext(String id, Address caller) {
-        context.setTransactionId(id);
-        context.caller = caller;
-        context.setTransactionMessage(Context.TransactionMessage.SAGAS);
-    }
-
-    private void clearTpcInContext() {
-        context.setTransactionId(null);
-        context.caller = null;
-        context.setTransactionMessage(null);
-    }
-
-    private static final class FakeClient implements RequestReplyClient {
-        ToFunction wasSentToFunction;
-        Supplier<FromFunction> fromFunction = FromFunction::getDefaultInstance;
-
-        @Override
-        public CompletableFuture<FromFunction> call(
-                ToFunctionRequestSummary requestSummary,
-                RemoteInvocationMetrics metrics,
-                ToFunction toFunction) {
-            this.wasSentToFunction = toFunction;
-            try {
-                return CompletableFuture.completedFuture(this.fromFunction.get());
-            } catch (Throwable t) {
-                CompletableFuture<FromFunction> failed = new CompletableFuture<>();
-                failed.completeExceptionally(t);
-                return failed;
-            }
-        }
-
-        /** return the n-th invocation sent as part of the current batch. */
-        Invocation capturedInvocation(int n) {
-            return wasSentToFunction.getInvocation().getInvocations(n);
-        }
-
-        ByteString capturedState(int n) {
-            return wasSentToFunction.getInvocation().getState(n).getStateValue();
-        }
-
-        public int capturedInvocationBatchSize() {
-            return wasSentToFunction.getInvocation().getInvocationsCount();
-        }
-    }
-
-    private static final class FakeContext implements InternalContext {
-
-        private final BacklogTrackingMetrics fakeMetrics = new BacklogTrackingMetrics();
-
-        Address caller;
-        boolean needsWaiting;
-
-        TransactionMessage transactionMessage;
-        String transactionId;
-
-        // capture emitted messages
-        List<Map.Entry<EgressIdentifier<?>, ?>> egresses = new ArrayList<>();
-        List<Map.Entry<Duration, ?>> delayed = new ArrayList<>();
-        List<Map.Entry<Address, Object>> messagesSent = new ArrayList<>();
-
-        @Override
-        public void awaitAsyncOperationComplete() {
-            needsWaiting = true;
-        }
-
-        @Override
-        public BacklogTrackingMetrics functionTypeMetrics() {
-            return fakeMetrics;
-        }
-
-        @Override
-        public Address self() {
-            return new Address(FN_TYPE, "0");
-        }
-
-        @Override
-        public Address caller() {
-            return caller;
-        }
-
-        public void setTransactionMessage(TransactionMessage t) {
-            transactionMessage = t;
-        }
-
-        @Override
-        public TransactionMessage getTransactionMessage() {
-            return transactionMessage;
-        }
-
-        @Override
-        public boolean isTransaction() {
-            if (transactionMessage == null) {
-                return false;
-            }
-            return true;
-        }
-
-        public void setTransactionId(String id) {
-            transactionId = id;
-        }
-
-        @Override
-        public String getTransactionId() {
-            if (transactionId != null && transactionId.equals("")) {
-                return null;
-            }
-            return transactionId;
-        }
-
-        @Override
-        public List<Address> getAddresses() {
-            return null;
-        }
-
-        @Override
-        public void sendTransactionMessage(Address to, Object message, String transactionId, TransactionMessage transactionMessage) {
-
-        }
-
-        @Override
-        public void sendTransactionReadMessage(Address to, Object message, String transactionId, List<Address> addresses) {
-
-        }
-
-        @Override
-        public void sendDeadlockDetectionProbe(Address to, Address initiator) {
-
-        }
-
-        @Override
-        public void sendBlockingFunctions(Address to, String transactionId, List<Address> addresses) {
-
-        }
-
-        @Override
-        public void send(Address to, Object message) {
-            messagesSent.add(new SimpleImmutableEntry<>(to, message));
-        }
-
-        @Override
-        public <T> void send(EgressIdentifier<T> egress, T message) {
-            egresses.add(new SimpleImmutableEntry<>(egress, message));
-        }
-
-        @Override
-        public void sendAfter(Duration delay, Address to, Object message) {
-            delayed.add(new SimpleImmutableEntry<>(delay, message));
-        }
-
-        @Override
-        public <M, T> void registerAsyncOperation(M metadata, CompletableFuture<T> future) {}
-    }
-
-    private static final class BacklogTrackingMetrics implements FunctionTypeMetrics {
-
-        private int numBacklog = 0;
-
-        public int numBacklog() {
-            return numBacklog;
-        }
-
-        @Override
-        public void appendBacklogMessages(int count) {
-            numBacklog += count;
-        }
-
-        @Override
-        public void consumeBacklogMessages(int count) {
-            numBacklog -= count;
-        }
-
-        @Override
-        public void remoteInvocationFailures() {}
-
-        @Override
-        public void remoteInvocationLatency(long elapsed) {}
-
-        @Override
-        public void asyncOperationRegistered() {}
-
-        @Override
-        public void asyncOperationCompleted() {}
-
-        @Override
-        public void incomingMessage() {}
-
-        @Override
-        public void outgoingRemoteMessage() {}
-
-        @Override
-        public void outgoingEgressMessage() {}
-
-        @Override
-        public void outgoingLocalMessage() {}
-
-        @Override
-        public void blockedAddress() {}
-
-        @Override
-        public void unblockedAddress() {}
     }
 }

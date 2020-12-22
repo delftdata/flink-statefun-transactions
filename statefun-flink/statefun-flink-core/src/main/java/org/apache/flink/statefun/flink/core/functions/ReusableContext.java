@@ -100,15 +100,6 @@ final class ReusableContext implements ApplyingContext, InternalContext {
   }
 
   @Override
-  public void sendTransactionReadMessage(Address to, Object what, String transactionId,
-                                         List<Address> addresses) {
-    Objects.requireNonNull(to);
-    Objects.requireNonNull(what);
-    Message envelope = messageFactory.from(self(), to, what, transactionId, TransactionMessage.READ, addresses);
-    sendEnvelope(to, envelope);
-  }
-
-  @Override
   public void sendDeadlockDetectionProbe(Address to, Address initiator) {
     Objects.requireNonNull(to);
     List<Address> addresses = new ArrayList<>();

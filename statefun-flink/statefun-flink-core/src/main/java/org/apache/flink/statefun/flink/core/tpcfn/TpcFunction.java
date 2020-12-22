@@ -9,7 +9,7 @@ import org.apache.flink.statefun.flink.core.metrics.RemoteInvocationMetrics;
 import org.apache.flink.statefun.flink.core.polyglot.generated.Address;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.InvocationResponse;
-import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.ResponseToTransactionFunction;
+import org.apache.flink.statefun.flink.core.generated.ResponseToTransactionFunction;
 import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction;
 import org.apache.flink.statefun.flink.core.reqreply.RequestReplyClient;
 import org.apache.flink.statefun.flink.core.reqreply.ToFunctionRequestSummary;
@@ -137,7 +137,7 @@ public class TpcFunction implements StatefulFunction {
         if (input instanceof ResponseToTransactionFunction) {
             if (transactionInProgress.getOrDefault(false)) {
                 ResponseToTransactionFunction responseToTransactionFunction =
-                        (FromFunction.ResponseToTransactionFunction) input;
+                        (ResponseToTransactionFunction) input;
                 handleResponseToTransactionFunction(castedContext, responseToTransactionFunction);
             } else {
                 // LOGGER.warn("Unexpected prepare phase result received.");
@@ -182,7 +182,7 @@ public class TpcFunction implements StatefulFunction {
         return;
     }
 
-    private void handleResponseToTransactionFunction(InternalContext context, FromFunction.ResponseToTransactionFunction response) {
+    private void handleResponseToTransactionFunction(InternalContext context, ResponseToTransactionFunction response) {
         if (!response.getTransactionId()
                 .equals(currentTransactionId.getOrDefault("."))) {
             // LOGGER.info("Received prepare phase response for different " +
