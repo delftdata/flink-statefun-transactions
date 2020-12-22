@@ -68,7 +68,7 @@ public class SagasFunction implements StatefulFunction {
 
     @Override
     public void invoke(Context context, Object input) {
-        LOGGER.info("Received invocation for SAGAs function: " + context.self().type().toString() + " " + context.self().id());
+//        LOGGER.info("Received invocation for SAGAs function: " + context.self().type().toString() + " " + context.self().id());
         InternalContext castedContext = (InternalContext) context;
 
         if (input instanceof AsyncOperationResult) {
@@ -123,8 +123,6 @@ public class SagasFunction implements StatefulFunction {
 
         currentTransactionId.set(UUID.randomUUID().toString());
 
-        LOGGER.info("Transaction ID = " + currentTransactionId.get());
-
         for(FromFunction.SagasFunctionPair invocationPair : invocationPairs) {
             currentTransactionFunctions.set(
                     invocationPair.getInitialMessage().getTarget(), 0);
@@ -146,13 +144,6 @@ public class SagasFunction implements StatefulFunction {
         }
 
         Address caller = sdkAddressToPolyglotAddress(context.caller());
-
-        LOGGER.info("Received message from caller: " + caller.toString());
-
-        for (Address add : currentTransactionFunctions.keys()) {
-            LOGGER.info("Key = " + add.toString());
-            LOGGER.info("Value = " + currentTransactionFunctions.get(add).toString());
-        }
 
         if (currentTransactionFunctions.get(caller) != 0) {
             throw new StatefulFunctionInvocationException(
@@ -196,7 +187,6 @@ public class SagasFunction implements StatefulFunction {
     }
 
     private void handleSuccess(InternalContext context) {
-        LOGGER.info("Handling success case for SAGAS transaction: " + context.self().type().toString());
         handleResults(context, currentTransactionResults.get().getSuccessResponse());
     }
 
