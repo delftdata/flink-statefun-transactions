@@ -36,7 +36,7 @@ public class TpcFunctionTest {
         functionUnderTest.invoke(context, Any.getDefaultInstance());
 
         functionUnderTest.invoke(context, standardAsyncOperationResult());
-        assertThat(context.getTpcMessagesSent().size(), is(2));
+        assertThat(context.getTransactionMessagesSent().size(), is(2));
     }
 
     @Test

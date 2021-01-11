@@ -13,7 +13,7 @@ module:
                 states:
                 - state
                 maxNumBatchRequests: 500
-                timeout: 2min
+                timeout: 5min
         - function:
             meta:
                 kind: http

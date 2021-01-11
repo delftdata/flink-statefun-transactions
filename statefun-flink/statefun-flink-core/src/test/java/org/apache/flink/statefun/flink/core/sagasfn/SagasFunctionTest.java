@@ -34,7 +34,7 @@ public class SagasFunctionTest {
         functionUnderTest.invoke(context, Any.getDefaultInstance());
 
         functionUnderTest.invoke(context, standardAsyncOperationResult());
-        assertThat(context.getTpcMessagesSent().size(), is(2));
+        assertThat(context.getTransactionMessagesSent().size(), is(2));
     }
 
     @Test
@@ -42,8 +42,11 @@ public class SagasFunctionTest {
         functionUnderTest.invoke(context, Any.getDefaultInstance());
 
         functionUnderTest.invoke(context, standardAsyncOperationResult());
+
         context.setCaller(FUNCTION_1_ADDR);
         functionUnderTest.invoke(context, successResponse(context.getTransactionId()));
+        assertThat(context.getMessagesSent().size(), is(0));
+
         context.setCaller(FUNCTION_2_ADDR);
         functionUnderTest.invoke(context, successResponse(context.getTransactionId()));
 

@@ -161,6 +161,8 @@ final class SdkMessage implements Message {
         return Envelope.TransactionMessage.COMMIT;
       case BLOCKING:
         return Envelope.TransactionMessage.BLOCKING;
+      case SAGAS:
+        return Envelope.TransactionMessage.SAGAS;
       default:
         return Envelope.TransactionMessage.NONE;
     }

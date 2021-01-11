@@ -141,7 +141,7 @@ public final class RequestReplyFunction implements StatefulFunction {
       currentTransactionId = currentTransactionDetails.getTransactionId();
     }
 
-    // Handle active transaction
+    // Handle active TPC transaction
     if (currentTransactionId != null &&
             context.getTransactionId().equals(currentTransactionId) &&
             locked.getOrDefault(false)) {

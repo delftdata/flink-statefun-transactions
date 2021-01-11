@@ -111,7 +111,7 @@ public class TestUtils {
     List<Map.Entry<EgressIdentifier<?>, ?>> egresses = new ArrayList<>();
     List<Map.Entry<Duration, ?>> delayed = new ArrayList<>();
     List<Map.Entry<Address, Object>> messagesSent = new ArrayList<>();
-    List<Map.Entry<Address, Object>> tpcMessagesSent = new ArrayList<>();
+    List<Map.Entry<Address, Object>> transactionMessagesSent = new ArrayList<>();
 
 
     @Override
@@ -232,14 +232,14 @@ public class TestUtils {
     }
 
 
-    public List<Map.Entry<Address, Object>> getTpcMessagesSent() {
-      return tpcMessagesSent;
+    public List<Map.Entry<Address, Object>> getTransactionMessagesSent() {
+      return transactionMessagesSent;
     }
 
 
     @Override
     public void sendTransactionMessage(Address to, Object message, String id, TransactionMessage transactionMessage) {
-      tpcMessagesSent.add(new AbstractMap.SimpleImmutableEntry<>(to, message));
+      transactionMessagesSent.add(new AbstractMap.SimpleImmutableEntry<>(to, message));
       transactionId = id;
     }
 
