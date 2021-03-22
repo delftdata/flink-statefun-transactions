@@ -45,3 +45,6 @@ build_images_and_push
 echo "---------- Building Sagas project"
 cd ${CURRENT_DIR}/sagas
 build_images_and_push
+echo "---------- Building internal invocations project"
+cd ${CURRENT_DIR}/internal-invocations
+build_images_and_push

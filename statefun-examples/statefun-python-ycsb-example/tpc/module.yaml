@@ -73,5 +73,6 @@ module:
             spec:
                 address: kafka-cluster-kafka-bootstrap:9092
                 deliverySemantic:
-                    type: at-least-once
+                  type: exactly-once
+                  transactionTimeoutMillis: 100000
                 transactionTimeoutMillis: 100000
