@@ -88,6 +88,12 @@ public final class RequestReplyFunction implements StatefulFunction {
   @Persisted
   private final PersistedValue<FromFunction.InvocationResponse> tpcTransactionResult =
           PersistedValue.of("transaction-result", FromFunction.InvocationResponse.class);
+  @Persisted
+  private final PersistedValue<Long> startTimeCurrentLock =
+          PersistedValue.of("start-time-current-lock", Long.class);
+  @Persisted
+  private final PersistedValue<Long> previousLockTime =
+          PersistedValue.of("previousLockTime", Long.class);
 
   public RequestReplyFunction(
       PersistedRemoteFunctionValues managedStates,
@@ -158,6 +164,8 @@ public final class RequestReplyFunction implements StatefulFunction {
         }
         continueProcessingBatchedRequests(context);
       }
+      previousLockTime.set(startTimeCurrentLock.get() - System.currentTimeMillis() / 1000L);
+      startTimeCurrentLock.clear();
       return;
     }
 
@@ -394,10 +402,13 @@ public final class RequestReplyFunction implements StatefulFunction {
 
   private void replyToTransactionFunction(InternalContext context, boolean success, String transactionId, Address address) {
     ResponseToTransactionFunction response = ResponseToTransactionFunction.newBuilder()
+            .setLockTime(previousLockTime.getOrDefault(-1L))
             .setSuccess(success)
             .setTransactionId(transactionId)
             .build();
     context.send(address, response);
+    startTimeCurrentLock.set(System.currentTimeMillis() / 1000L);
+    previousLockTime.clear();
   }
 
   private TransactionDetails.Builder getTransactionDetailsBuilder(InternalContext context) {

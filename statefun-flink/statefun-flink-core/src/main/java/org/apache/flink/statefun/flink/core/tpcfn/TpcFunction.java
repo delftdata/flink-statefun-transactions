@@ -4,6 +4,8 @@ import com.google.protobuf.Any;
 import org.apache.commons.lang3.tuple.ImmutableTriple;
 import org.apache.flink.statefun.flink.core.backpressure.InternalContext;
 import org.apache.flink.statefun.flink.core.functions.StatefulFunctionInvocationException;
+import org.apache.flink.statefun.flink.core.generated.OutputMessageWithDeadlockTime;
+import org.apache.flink.statefun.flink.core.generated.OutputMessageWithLockTimes;
 import org.apache.flink.statefun.flink.core.generated.Payload;
 import org.apache.flink.statefun.flink.core.metrics.RemoteInvocationMetrics;
 import org.apache.flink.statefun.flink.core.polyglot.generated.Address;
@@ -64,6 +66,14 @@ public class TpcFunction implements StatefulFunction {
     private final PersistedValue<List> blockingAddresses =
             PersistedValue.of("blocking-addresses", List.class);
 
+    @Persisted
+    private final PersistedValue<Long> startTimeDeadlockDetection =
+            PersistedValue.of("start-time-deadlock-detection", Long.class);
+
+    @Persisted
+    private final PersistedValue<List> lockTimes =
+            PersistedValue.of("lock-times", List.class);
+
     public TpcFunction(
             int maxNumBatchRequests,
             RequestReplyClient client) {
@@ -80,6 +90,12 @@ public class TpcFunction implements StatefulFunction {
                 context.getTransactionMessage().equals(Context.TransactionMessage.BLOCKING)) {
             if (transactionInProgress.getOrDefault(false) &&
                     context.getTransactionId().equals(currentTransactionId.getOrDefault("-1"))) {
+
+                // START DEADLOCK DETECTION TIME
+                if (startTimeDeadlockDetection.getOrDefault(-1L) == -1) {
+                    startTimeDeadlockDetection.set(System.currentTimeMillis() / 1000L);
+                }
+
                 List<Address> blocking = blockingAddresses.getOrDefault(new ArrayList());
                 List<Address> dependent = dependentAddresses.getOrDefault(new ArrayList());
                 // Multiple functions may return with same locking addresses, should not send message twice
@@ -135,6 +151,10 @@ public class TpcFunction implements StatefulFunction {
         }
 
         if (input instanceof ResponseToTransactionFunction) {
+            List<Long> lockTimesList = lockTimes.getOrDefault(new ArrayList<Long>());
+            lockTimesList.add(((ResponseToTransactionFunction) input).getLockTime());
+            lockTimes.set(lockTimesList);
+
             if (transactionInProgress.getOrDefault(false)) {
                 ResponseToTransactionFunction responseToTransactionFunction =
                         (ResponseToTransactionFunction) input;
@@ -237,6 +257,8 @@ public class TpcFunction implements StatefulFunction {
                         Context.TransactionMessage.PREPARE);
         }
         currentTransactionResults.set(invocationResult);
+
+        lockTimes.set(new ArrayList<Long>());
     }
 
     private FromFunction.TpcFunctionInvocationResponse unpackInvocationOrThrow(
@@ -284,7 +306,7 @@ public class TpcFunction implements StatefulFunction {
             context.sendTransactionMessage(to, message, currentTransactionId.get(),
                     Context.TransactionMessage.ABORT);
         }
-        handleResults(context, currentTransactionResults.get().getRetryableResponse());
+        handleResultsWithDeadlockTime(context, currentTransactionResults.get().getRetryableResponse());
     }
 
     private void cleanUp(InternalContext context) {
@@ -295,6 +317,9 @@ public class TpcFunction implements StatefulFunction {
 
         dependentAddresses.clear();
         blockingAddresses.clear();
+
+        lockTimes.clear();
+        startTimeDeadlockDetection.clear();
 
         continueProcessingQueuedTransactions(context);
     }
@@ -319,12 +344,56 @@ public class TpcFunction implements StatefulFunction {
         handleOutgoingDelayedMessages(context, invocationResponse.getDelayedInvocationsList());
     }
 
+    private void handleResultsWithDeadlockTime(Context context, InvocationResponse invocationResponse) {
+        handleEgressMessagesWithDeadlockTime(context, invocationResponse.getOutgoingEgressesList());
+        handleOutgoingMessages(context, invocationResponse.getOutgoingMessagesList());
+        handleOutgoingDelayedMessages(context, invocationResponse.getDelayedInvocationsList());
+    }
+
     private void handleEgressMessages(Context context, List<FromFunction.EgressMessage> egressMessages) {
         for (FromFunction.EgressMessage egressMessage : egressMessages) {
             EgressIdentifier<Any> id =
                     new EgressIdentifier<>(
                             egressMessage.getEgressNamespace(), egressMessage.getEgressType(), Any.class);
-            context.send(id, egressMessage.getArgument());
+
+            // Add lock times
+            OutputMessageWithLockTimes arg = OutputMessageWithLockTimes.newBuilder()
+                    .setArg(egressMessage.getArgument())
+                    .addAllTimes(new ArrayList<>())
+                    .build();
+
+            context.send(id, Any.pack(arg));
+        }
+    }
+
+    private void handleEgressMessagesWithDeadlockTime(Context context, List<FromFunction.EgressMessage> egressMessages) {
+        for (FromFunction.EgressMessage egressMessage : egressMessages) {
+            EgressIdentifier<Any> id =
+                    new EgressIdentifier<>(
+                            egressMessage.getEgressNamespace(), egressMessage.getEgressType(), Any.class);
+
+            // Add deadlock time
+            OutputMessageWithDeadlockTime arg = OutputMessageWithDeadlockTime.newBuilder()
+                    .setArg(egressMessage.getArgument())
+                    .setTime(System.currentTimeMillis() / 1000L - startTimeDeadlockDetection.get())
+                    .build();
+
+            context.send(id, Any.pack(arg));
+        }
+    }
+
+    private void handleEgressMessagesWithLockTimes(Context context, List<FromFunction.EgressMessage> egressMessages) {
+        for (FromFunction.EgressMessage egressMessage : egressMessages) {
+            EgressIdentifier<Any> id =
+                    new EgressIdentifier<>(
+                            egressMessage.getEgressNamespace(), egressMessage.getEgressType(), Any.class);
+
+            OutputMessageWithDeadlockTime arg = OutputMessageWithDeadlockTime.newBuilder()
+                    .setArg(egressMessage.getArgument())
+                    .setTime(System.currentTimeMillis() / 1000L - startTimeDeadlockDetection.get())
+                    .build();
+
+            context.send(id, Any.pack(arg));
         }
     }
 

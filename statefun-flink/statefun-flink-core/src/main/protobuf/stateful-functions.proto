@@ -22,6 +22,8 @@ package org.apache.flink.statefun.flink.core;
 option java_package = "org.apache.flink.statefun.flink.core.generated";
 option java_multiple_files = true;
 
+import "google/protobuf/any.proto";
+
 message EnvelopeAddress {
     string namespace = 1;
     string type = 2;
@@ -64,4 +66,15 @@ message Envelope {
 message ResponseToTransactionFunction {
     bool success = 1;
     string transaction_id = 2;
+    int64 lock_time = 3;
+}
+
+message OutputMessageWithDeadlockTime {
+    int64 time = 1;
+    google.protobuf.Any arg = 2;
+}
+
+message OutputMessageWithLockTimes {
+    repeated int64 times = 1;
+    google.protobuf.Any arg = 2;
 }
