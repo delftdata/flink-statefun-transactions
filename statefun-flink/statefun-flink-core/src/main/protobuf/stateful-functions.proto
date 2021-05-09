@@ -69,12 +69,21 @@ message ResponseToTransactionFunction {
     int64 lock_time = 3;
 }
 
-message OutputMessageWithDeadlockTime {
-    int64 time = 1;
-    google.protobuf.Any arg = 2;
+message Response {
+     string request_id = 1;
+     int32 status_code = 2;
+     google.protobuf.Any message = 3;
 }
 
-message OutputMessageWithLockTimes {
+message EgressMessageWithTime {
+    Response arg = 1;
+    oneof time {
+        RepeatedTimes lock_times = 3;
+        int64 deadlock_detection_time = 4; 
+    }
+}
+
+/* This is required due to protobuf not supporting repeated in oneof */
+message RepeatedTimes {
     repeated int64 times = 1;
-    google.protobuf.Any arg = 2;
 }

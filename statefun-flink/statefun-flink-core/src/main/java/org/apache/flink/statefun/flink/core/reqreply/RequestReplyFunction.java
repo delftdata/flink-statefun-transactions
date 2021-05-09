@@ -27,7 +27,10 @@ import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
+import com.google.protobuf.InvalidProtocolBufferException;
 import org.apache.flink.statefun.flink.core.backpressure.InternalContext;
+import org.apache.flink.statefun.flink.core.generated.EgressMessageWithTime;
+import org.apache.flink.statefun.flink.core.generated.Response;
 import org.apache.flink.statefun.flink.core.generated.ResponseToTransactionFunction;
 import org.apache.flink.statefun.flink.core.metrics.RemoteInvocationMetrics;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction;
@@ -39,6 +42,7 @@ import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction.BatchD
 import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction.TransactionDetails;
 import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction.Invocation;
 import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction.InvocationBatchRequest;
+import org.apache.flink.statefun.flink.io.generated.KafkaProducerRecord;
 import org.apache.flink.statefun.sdk.*;
 import org.apache.flink.statefun.sdk.annotations.Persisted;
 import org.apache.flink.statefun.sdk.io.EgressIdentifier;
@@ -155,6 +159,11 @@ public final class RequestReplyFunction implements StatefulFunction {
         cleanUpAfterTransaction();
         if (!tpcInFlight.getOrDefault(false)) {
           continueProcessingBatchedRequests(context);
+          Long lockTime = System.currentTimeMillis() - startTimeCurrentLock.get();
+          LOGGER.info("Locktime was: " + lockTime.toString());
+          previousLockTime.set(lockTime);
+
+          startTimeCurrentLock.clear();
         }
       } else if (context.getTransactionMessage().equals(Context.TransactionMessage.COMMIT)) {
         InvocationResponse response = tpcTransactionResult.get();
@@ -163,9 +172,11 @@ public final class RequestReplyFunction implements StatefulFunction {
           handleInvocationResponse(context, response);
         }
         continueProcessingBatchedRequests(context);
+        Long lockTime = System.currentTimeMillis() - startTimeCurrentLock.get();
+        previousLockTime.set(lockTime);
+
+        startTimeCurrentLock.clear();
       }
-      previousLockTime.set(startTimeCurrentLock.get() - System.currentTimeMillis() / 1000L);
-      startTimeCurrentLock.clear();
       return;
     }
 
@@ -407,7 +418,7 @@ public final class RequestReplyFunction implements StatefulFunction {
             .setTransactionId(transactionId)
             .build();
     context.send(address, response);
-    startTimeCurrentLock.set(System.currentTimeMillis() / 1000L);
+    startTimeCurrentLock.set(System.currentTimeMillis());
     previousLockTime.clear();
   }
 
@@ -481,7 +492,30 @@ public final class RequestReplyFunction implements StatefulFunction {
       EgressIdentifier<Any> id =
           new EgressIdentifier<>(
               egressMessage.getEgressNamespace(), egressMessage.getEgressType(), Any.class);
-      context.send(id, egressMessage.getArgument());
+
+      // Deserialize KafkaProducerRecord
+      KafkaProducerRecord unpacked = null;
+
+      try {
+        unpacked = egressMessage.getArgument().unpack(KafkaProducerRecord.class);
+      } catch (InvalidProtocolBufferException e) {
+        throw new RuntimeException(
+                "Unable to unpack message as a " + KafkaProducerRecord.class.getName(), e);
+      }
+
+      EgressMessageWithTime msg = null;
+      try {
+        msg = EgressMessageWithTime.newBuilder()
+                .setArg(Response.parseFrom(unpacked.getValueBytes().toByteArray()))
+                .build();
+      } catch (InvalidProtocolBufferException e) {
+        e.printStackTrace();
+      }
+
+      // Add to original KafkaProducerRecord
+      KafkaProducerRecord res = unpacked.toBuilder().setValueBytes(msg.toByteString()).build();
+
+      context.send(id, Any.pack(res));
     }
   }
 

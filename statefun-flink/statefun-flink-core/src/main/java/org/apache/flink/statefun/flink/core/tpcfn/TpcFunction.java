@@ -1,18 +1,17 @@
 package org.apache.flink.statefun.flink.core.tpcfn;
 
 import com.google.protobuf.Any;
+import com.google.protobuf.InvalidProtocolBufferException;
 import org.apache.commons.lang3.tuple.ImmutableTriple;
 import org.apache.flink.statefun.flink.core.backpressure.InternalContext;
 import org.apache.flink.statefun.flink.core.functions.StatefulFunctionInvocationException;
-import org.apache.flink.statefun.flink.core.generated.OutputMessageWithDeadlockTime;
-import org.apache.flink.statefun.flink.core.generated.OutputMessageWithLockTimes;
-import org.apache.flink.statefun.flink.core.generated.Payload;
+import org.apache.flink.statefun.flink.core.generated.*;
 import org.apache.flink.statefun.flink.core.metrics.RemoteInvocationMetrics;
 import org.apache.flink.statefun.flink.core.polyglot.generated.Address;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.InvocationResponse;
-import org.apache.flink.statefun.flink.core.generated.ResponseToTransactionFunction;
 import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction;
+import org.apache.flink.statefun.flink.io.generated.KafkaProducerRecord;
 import org.apache.flink.statefun.flink.core.reqreply.RequestReplyClient;
 import org.apache.flink.statefun.flink.core.reqreply.ToFunctionRequestSummary;
 import org.apache.flink.statefun.sdk.AsyncOperationResult;
@@ -92,8 +91,8 @@ public class TpcFunction implements StatefulFunction {
                     context.getTransactionId().equals(currentTransactionId.getOrDefault("-1"))) {
 
                 // START DEADLOCK DETECTION TIME
-                if (startTimeDeadlockDetection.getOrDefault(-1L) == -1) {
-                    startTimeDeadlockDetection.set(System.currentTimeMillis() / 1000L);
+                if (startTimeDeadlockDetection.getOrDefault(-1L).equals(-1L)) {
+                    startTimeDeadlockDetection.set(System.currentTimeMillis());
                 }
 
                 List<Address> blocking = blockingAddresses.getOrDefault(new ArrayList());
@@ -356,13 +355,32 @@ public class TpcFunction implements StatefulFunction {
                     new EgressIdentifier<>(
                             egressMessage.getEgressNamespace(), egressMessage.getEgressType(), Any.class);
 
-            // Add lock times
-            OutputMessageWithLockTimes arg = OutputMessageWithLockTimes.newBuilder()
-                    .setArg(egressMessage.getArgument())
-                    .addAllTimes(new ArrayList<>())
-                    .build();
+            // Deserialize KafkaProducerRecord
+            KafkaProducerRecord unpacked = null;
 
-            context.send(id, Any.pack(arg));
+            try {
+              unpacked = egressMessage.getArgument().unpack(KafkaProducerRecord.class);
+            } catch (InvalidProtocolBufferException e) {
+              throw new RuntimeException(
+                  "Unable to unpack message as a " + KafkaProducerRecord.class.getName(), e);
+            }
+
+            // Add lock times
+            EgressMessageWithTime msg = null;
+            try {
+                msg = EgressMessageWithTime.newBuilder()
+                        .setArg(Response.parseFrom(unpacked.getValueBytes().toByteArray()))
+                        .setLockTimes(RepeatedTimes.newBuilder()
+                            .addAllTimes(lockTimes.getOrDefault(new ArrayList())))
+                        .build();
+            } catch (InvalidProtocolBufferException e) {
+                e.printStackTrace();
+            }
+
+            // Add to original KafkaProducerRecord
+            KafkaProducerRecord res = unpacked.toBuilder().setValueBytes(msg.toByteString()).build();
+
+            context.send(id, Any.pack(res));
         }
     }
 
@@ -372,28 +390,33 @@ public class TpcFunction implements StatefulFunction {
                     new EgressIdentifier<>(
                             egressMessage.getEgressNamespace(), egressMessage.getEgressType(), Any.class);
 
+            // Deserialize KafkaProducerRecord
+            KafkaProducerRecord unpacked = null;
+
+            LOGGER.info("FOUND DEADLOCK!");
+
+            try {
+                unpacked = egressMessage.getArgument().unpack(KafkaProducerRecord.class);
+            } catch (InvalidProtocolBufferException e) {
+                throw new RuntimeException(
+                        "Unable to unpack message as a " + KafkaProducerRecord.class.getName(), e);
+            }
+
             // Add deadlock time
-            OutputMessageWithDeadlockTime arg = OutputMessageWithDeadlockTime.newBuilder()
-                    .setArg(egressMessage.getArgument())
-                    .setTime(System.currentTimeMillis() / 1000L - startTimeDeadlockDetection.get())
-                    .build();
+            EgressMessageWithTime msg = null;
+            try {
+                msg = EgressMessageWithTime.newBuilder()
+                        .setArg(Response.parseFrom(unpacked.getValueBytes().toByteArray()))
+                        .setDeadlockDetectionTime(System.currentTimeMillis() - startTimeDeadlockDetection.get())
+                        .build();
+            } catch (InvalidProtocolBufferException e) {
+                e.printStackTrace();
+            }
 
-            context.send(id, Any.pack(arg));
-        }
-    }
+            // Add to original KafkaProducerRecord
+            KafkaProducerRecord res = unpacked.toBuilder().setValueBytes(msg.toByteString()).build();
 
-    private void handleEgressMessagesWithLockTimes(Context context, List<FromFunction.EgressMessage> egressMessages) {
-        for (FromFunction.EgressMessage egressMessage : egressMessages) {
-            EgressIdentifier<Any> id =
-                    new EgressIdentifier<>(
-                            egressMessage.getEgressNamespace(), egressMessage.getEgressType(), Any.class);
-
-            OutputMessageWithDeadlockTime arg = OutputMessageWithDeadlockTime.newBuilder()
-                    .setArg(egressMessage.getArgument())
-                    .setTime(System.currentTimeMillis() / 1000L - startTimeDeadlockDetection.get())
-                    .build();
-
-            context.send(id, Any.pack(arg));
+            context.send(id, Any.pack(res));
         }
     }
 

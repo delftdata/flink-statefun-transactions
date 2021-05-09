@@ -1,8 +1,11 @@
 package org.apache.flink.statefun.flink.core.sagasfn;
 
 import com.google.protobuf.Any;
+import com.google.protobuf.InvalidProtocolBufferException;
 import org.apache.flink.statefun.flink.core.backpressure.InternalContext;
 import org.apache.flink.statefun.flink.core.functions.StatefulFunctionInvocationException;
+import org.apache.flink.statefun.flink.core.generated.EgressMessageWithTime;
+import org.apache.flink.statefun.flink.core.generated.Response;
 import org.apache.flink.statefun.flink.core.metrics.RemoteInvocationMetrics;
 import org.apache.flink.statefun.flink.core.polyglot.generated.Address;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction;
@@ -11,6 +14,7 @@ import org.apache.flink.statefun.flink.core.generated.ResponseToTransactionFunct
 import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction;
 import org.apache.flink.statefun.flink.core.reqreply.RequestReplyClient;
 import org.apache.flink.statefun.flink.core.reqreply.ToFunctionRequestSummary;
+import org.apache.flink.statefun.flink.io.generated.KafkaProducerRecord;
 import org.apache.flink.statefun.sdk.AsyncOperationResult;
 import org.apache.flink.statefun.sdk.Context;
 import org.apache.flink.statefun.sdk.StatefulFunction;
@@ -249,7 +253,30 @@ public class SagasFunction implements StatefulFunction {
             EgressIdentifier<Any> id =
                     new EgressIdentifier<>(
                             egressMessage.getEgressNamespace(), egressMessage.getEgressType(), Any.class);
-            context.send(id, egressMessage.getArgument());
+
+            // Deserialize KafkaProducerRecord
+            KafkaProducerRecord unpacked = null;
+
+            try {
+                unpacked = egressMessage.getArgument().unpack(KafkaProducerRecord.class);
+            } catch (InvalidProtocolBufferException e) {
+                throw new RuntimeException(
+                        "Unable to unpack message as a " + KafkaProducerRecord.class.getName(), e);
+            }
+
+            EgressMessageWithTime msg = null;
+            try {
+                msg = EgressMessageWithTime.newBuilder()
+                        .setArg(Response.parseFrom(unpacked.getValueBytes().toByteArray()))
+                        .build();
+            } catch (InvalidProtocolBufferException e) {
+                e.printStackTrace();
+            }
+
+            // Add to original KafkaProducerRecord
+            KafkaProducerRecord res = unpacked.toBuilder().setValueBytes(msg.toByteString()).build();
+
+            context.send(id, Any.pack(res));
         }
     }
 

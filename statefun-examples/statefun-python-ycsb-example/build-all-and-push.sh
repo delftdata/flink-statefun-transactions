@@ -12,7 +12,7 @@ function build_python_sdk_image {
 function build_statefun_image {
     cd "${BASE_DIR}"
     echo "--- Packaging project"
-    mvn clean package > /dev/null
+    mvn clean package -Dmaven.test.skip=true > /dev/null
     cd "${BASE_DIR}/tools/docker"
     echo "--- Building image"
     ./build-stateful-functions.sh > /dev/null
@@ -45,6 +45,6 @@ build_images_and_push
 echo "---------- Building Sagas project"
 cd ${CURRENT_DIR}/sagas
 build_images_and_push
-echo "---------- Building internal invocations project"
-cd ${CURRENT_DIR}/internal-invocations
-build_images_and_push
+#echo "---------- Building internal invocations project"
+#cd ${CURRENT_DIR}/internal-invocations
+#build_images_and_push
