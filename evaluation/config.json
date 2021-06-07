@@ -1,0 +1,46 @@
+{
+    "local": false,
+    "machine_ip": "145.100.57.101",
+    "producer_hosts": ["145.100.57.99"],
+    "user": "ubuntu",
+    "distribution": "uniform",
+    "experiments":
+        [
+            {
+                "system": "sagas",
+                "record_count": 5000,
+                "workers": 5,
+                "operations": [
+                    {
+                        "ops": "0_read_0_update_100_transfer",
+                        "initial_throughput": 1750,
+                        "throughput_steps": 250
+                    }
+                ]
+            },
+            {
+                "system": "tpc",
+                "record_count": 5000,
+                "workers": 3,
+                "operations": [
+                    {
+                        "ops": "0_read_0_update_100_transfer",
+                        "initial_throughput": 400,
+                        "throughput_steps": 200
+                    }
+                ]
+            },
+            {
+                "system": "tpc",
+                "record_count": 5000,
+                "workers": 5,
+                "operations": [
+                    {
+                        "ops": "0_read_0_update_100_transfer",
+                        "initial_throughput": 600,
+                        "throughput_steps": 200
+                    }
+                ]
+            }
+        ]
+}

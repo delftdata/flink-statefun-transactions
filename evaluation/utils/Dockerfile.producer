@@ -1,0 +1,16 @@
+FROM python:3.8-slim
+
+RUN mkdir -p /app
+WORKDIR /app
+
+COPY requirements.txt /app
+RUN python -m pip install --upgrade setuptools pip wheel
+RUN pip install -r requirements.txt
+
+COPY generator.py /app/utils/
+COPY messages_pb2.py /app/utils/
+COPY measure.py /app/utils/
+COPY producer.py /app/
+
+CMD ["bash"]
+

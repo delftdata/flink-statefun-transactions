@@ -1,0 +1,41 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transfer-function
+spec:
+  selector:
+    matchLabels:
+      service: transfer-function
+  replicas: 15
+  template:
+    metadata:
+      labels:
+        service: transfer-function
+    spec:
+      containers:
+        - name: transfer-function
+          image: martijndeh/extended-statefun-ycsb-sagas-transfer
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 2
+            limits:
+              cpu: 2
+          command: ["gunicorn"]
+          args: ["-b 0.0.0.0:80", "-w 5",  "-k aiohttp.GunicornWebWorker", "transfer_function:app"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: transfer-function
+spec:
+  type: ClusterIP
+  selector:
+    service: transfer-function
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80

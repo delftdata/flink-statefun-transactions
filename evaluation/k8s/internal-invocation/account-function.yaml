@@ -1,0 +1,41 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: account-function
+spec:
+  selector:
+    matchLabels:
+      service: account-function
+  replicas: 25
+  template:
+    metadata:
+      labels:
+        service: account-function
+    spec:
+      containers:
+        - name: account-function
+          image: martijndeh/statefun-internal-invocation-account
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 2
+            limits:
+              cpu: 2
+          command: ["gunicorn"]
+          args: ["-b 0.0.0.0:80", "-w 5",  "-k aiohttp.GunicornWebWorker", "account_function:app"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: account-function
+spec:
+  type: ClusterIP
+  selector:
+    service: account-function
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80

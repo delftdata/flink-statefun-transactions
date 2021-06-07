@@ -1,0 +1,5 @@
+kubernetes==12.0.0
+numpy==1.19.4
+confluent-kafka==1.5.0
+protobuf
+matplotlib
